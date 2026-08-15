@@ -1,189 +1,150 @@
-import { useState } from 'react';
-import { 
-  Search, Plus, BarChart2, Zap, RotateCcw, 
-  Camera, Maximize2, LayoutGrid, Layers, Sun, Moon, Sparkles 
-} from 'lucide-react';
+import { Search, Sun, Moon, Maximize2, RotateCcw, Camera, ShieldCheck, Zap } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
-import OptionChainModal from './OptionChainModal';
 
-export default function Navbar({ timeframe, setTimeframe, onOpenOrder }) {
-  const { selectedStock, walletBalance, resetWallet, theme, setTheme } = useTradingStore();
-  const [isOptionChainOpen, setIsOptionChainOpen] = useState(false);
+export default function Navbar({ 
+  onOpenOrder, 
+  onToggleWatchlist, 
+  isWatchlistOpen = true, 
+  timeframe = '1D', 
+  setTimeframe = () => {} 
+}) {
+  const store = useTradingStore();
+  const selectedStock = store?.selectedStock || { symbol: 'RELIANCE', name: 'Reliance Industries Ltd.' };
+  const rawCash = store?.cash ?? store?.funds ?? 1000000;
+  const cash = typeof rawCash === 'number' ? rawCash : parseFloat(rawCash) || 1000000;
+  const theme = store?.theme || 'dark';
+  const toggleTheme = store?.toggleTheme || (() => {});
 
-  const timeframes = ['1m', '5m', '10m', '15m', '1D', '1W', '1M'];
   const isDark = theme === 'dark' || theme === 'midnight';
+  const timeframesList = ['1m', '5m', '10m', '15m', '1D', '1W', '1M'];
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  };
 
   return (
-    <>
-      <header
-        style={{
-          backgroundColor: theme === 'midnight' ? '#000000' : theme === 'dark' ? '#151922' : '#ffffff',
-          borderColor: isDark ? '#232936' : '#e0e3eb',
-          color: isDark ? '#ffffff' : '#131722',
-        }}
-        className="h-11 border-b px-3 flex items-center justify-between select-none text-xs font-sans transition-colors"
-      >
-        {/* Left Side */}
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-[#089981] flex items-center justify-center font-bold text-white text-xs shadow-xs">
-            ध
-          </div>
+    <header className="h-11 border-b border-[#1E293B] bg-[#0E131F] text-slate-200 flex items-center justify-between px-2 text-xs select-none shrink-0 z-40">
+      {/* Left Section: Logo, Stock Search & Timeframes */}
+      <div className="flex items-center gap-2">
+        {/* Dhan Logo & Watchlist Toggle */}
+        <button
+          onClick={onToggleWatchlist}
+          title={isWatchlistOpen ? "Close Watchlist" : "Open Watchlist"}
+          className={`w-7 h-7 rounded flex items-center justify-center font-bold text-sm cursor-pointer transition ${
+            isWatchlistOpen ? 'bg-[#00897B] text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          ध
+        </button>
 
-          <div
-            style={{
-              backgroundColor: isDark ? '#0B0E14' : '#f0f3fa',
-              borderColor: isDark ? '#232936' : '#e0e3eb',
-            }}
-            className="flex items-center gap-1 px-2 py-1 rounded border cursor-pointer"
-          >
-            <Search className="w-3.5 h-3.5 text-gray-500" />
-            <span className="font-bold uppercase">{selectedStock.symbol || 'STOCK'}</span>
-          </div>
-
-          <button title="Compare Symbol" className="p-1 text-gray-400 hover:text-white rounded">
-            <Plus className="w-4 h-4" />
-          </button>
-
-          <div className={`h-5 w-px ${isDark ? 'bg-[#232936]' : 'bg-[#e0e3eb]'} mx-1`} />
-
-          {/* Timeframe Buttons */}
-          <div className="flex items-center gap-0.5 font-mono">
-            {timeframes.map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={`px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                  timeframe === tf
-                    ? 'bg-[#2962ff] text-white font-bold'
-                    : isDark
-                    ? 'text-gray-400 hover:text-white hover:bg-[#1E2533]'
-                    : 'text-[#606266] hover:bg-[#f0f3fa] hover:text-[#131722]'
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
-
-          <div className={`h-5 w-px ${isDark ? 'bg-[#232936]' : 'bg-[#e0e3eb]'} mx-1`} />
-
-          <button title="Candlestick Style" className="p-1 text-gray-400 hover:text-white rounded">
-            <BarChart2 className="w-4 h-4" />
-          </button>
-          <button title="Indicators (fx)" className="px-1.5 py-0.5 font-serif italic text-sm text-gray-400 hover:text-white rounded font-bold">
-            fx
-          </button>
-          <button title="Templates" className="p-1 text-gray-400 hover:text-white rounded">
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+        {/* Active Stock Search Capsule */}
+        <div className="flex items-center gap-1.5 bg-[#151C2C] px-2.5 py-1 rounded border border-[#1E293B] hover:border-slate-600 cursor-pointer">
+          <Search className="w-3.5 h-3.5 text-slate-400" />
+          <span className="font-bold text-slate-100 uppercase tracking-wide text-xs">
+            {selectedStock?.symbol || 'STOCK'}
+          </span>
+          <span className="text-slate-500 font-bold ml-1">+</span>
         </div>
 
-        {/* Right Tools & Theme Selector */}
-        <div className="flex items-center gap-2">
-          {/* Quick Buy & Sell Buttons */}
+        {/* Timeframe Selector Bar */}
+        <div className="hidden md:flex items-center gap-0.5 ml-1 bg-[#111726] p-0.5 rounded border border-[#1E293B]">
+          {timeframesList.map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                timeframe === tf 
+                  ? 'bg-blue-600 text-white font-bold shadow-xs' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+
+        {/* Indicators and Layout Icons */}
+        <div className="hidden lg:flex items-center gap-2 text-slate-400 text-sm ml-2 border-l border-[#1E293B] pl-2">
+          <span className="hover:text-white cursor-pointer px-1 py-0.5" title="Indicators">fx</span>
+          <span className="hover:text-white cursor-pointer px-1 py-0.5" title="Layout">⊞</span>
+        </div>
+      </div>
+
+      {/* Right Section: Quick Order, Scalper, Cash & Settings */}
+      <div className="flex items-center gap-2">
+        {/* Quick Buy/Sell Buttons */}
+        <div className="flex items-center gap-1.5 mr-1">
           <button
-            onClick={() => onOpenOrder('SELL')}
-            className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            onClick={() => onOpenOrder && onOpenOrder('SELL')}
+            className="bg-[#ef5350] hover:bg-[#e53935] active:scale-95 text-white px-3 py-1 rounded font-bold text-xs cursor-pointer transition shadow"
           >
             Sell
           </button>
           <button
-            onClick={() => onOpenOrder('BUY')}
-            className="bg-[#2962ff] hover:bg-[#1e53e5] text-white px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            onClick={() => onOpenOrder && onOpenOrder('BUY')}
+            className="bg-[#26a69a] hover:bg-[#00897b] active:scale-95 text-white px-3 py-1 rounded font-bold text-xs cursor-pointer transition shadow"
           >
             Buy
           </button>
+        </div>
 
-          {/* Scalper Mode */}
-          <button className="flex items-center gap-1 border border-[#2962ff] text-[#2962ff] bg-[#2962ff]/10 px-2 py-0.5 rounded font-bold text-xs hover:bg-[#2962ff] hover:text-white transition-all cursor-pointer">
-            <Zap className="w-3.5 h-3.5" />
-            Scalper
+        {/* Scalper Mode */}
+        <button className="hidden sm:flex items-center gap-1 bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded text-xs font-semibold hover:bg-blue-600/30 cursor-pointer">
+          <Zap className="w-3 h-3" />
+          <span>Scalper</span>
+        </button>
+
+        {/* Option Chain */}
+        <button className="hidden sm:flex items-center gap-1 bg-slate-800 text-slate-300 border border-[#1E293B] px-2 py-1 rounded text-xs font-semibold hover:bg-slate-700 cursor-pointer">
+          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+          <span>Option Chain</span>
+        </button>
+
+        {/* Available Cash Pill (Safe formatting) */}
+        <div className="flex items-center gap-1 bg-[#151C2C] px-2.5 py-1 rounded border border-[#1E293B] font-mono text-[11px]">
+          <span className="text-slate-400 font-sans">Cash:</span>
+          <span className="font-bold text-emerald-400">
+            ₹{Number(cash).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+
+        {/* Quick Toolbar Utilities */}
+        <div className="flex items-center gap-1 text-slate-400 border-l border-[#1E293B] pl-2">
+          <button 
+            onClick={toggleTheme} 
+            className="p-1 hover:text-white hover:bg-slate-800 rounded cursor-pointer transition"
+            title="Toggle Theme"
+          >
+            {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-
-          {/* Option Chain */}
-          <button
-            onClick={() => setIsOptionChainOpen(true)}
-            style={{
-              backgroundColor: isDark ? '#0B0E14' : '#fafbfc',
-              borderColor: isDark ? '#232936' : '#e0e3eb',
-            }}
-            className="flex items-center gap-1 border px-2 py-1 rounded text-xs font-semibold transition-all cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-[#089981]" />
-            Option Chain
-          </button>
-
-          {/* 3-THEME SWITCHER DROPDOWN */}
-          <div
-            style={{
-              backgroundColor: isDark ? '#0B0E14' : '#f0f3fa',
-              borderColor: isDark ? '#232936' : '#e0e3eb',
-            }}
-            className="flex items-center rounded border p-0.5 gap-0.5"
-          >
-            <button
-              title="Light Theme"
-              onClick={() => setTheme('light')}
-              className={`p-1 rounded cursor-pointer transition-colors ${
-                theme === 'light' ? 'bg-[#ffffff] text-[#131722] shadow' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Sun className="w-3.5 h-3.5" />
-            </button>
-            <button
-              title="Dark Dhan Theme"
-              onClick={() => setTheme('dark')}
-              className={`p-1 rounded cursor-pointer transition-colors ${
-                theme === 'dark' ? 'bg-[#232936] text-[#00D09C] shadow' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Moon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              title="OLED Midnight Black"
-              onClick={() => setTheme('midnight')}
-              className={`p-1 rounded cursor-pointer transition-colors ${
-                theme === 'midnight' ? 'bg-[#1E2533] text-[#2962ff] shadow' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className={`h-5 w-px ${isDark ? 'bg-[#232936]' : 'bg-[#e0e3eb]'} mx-0.5`} />
-
-          {/* Virtual Wallet */}
-          <div
-            style={{
-              backgroundColor: isDark ? '#0B0E14' : '#f0f3fa',
-              borderColor: isDark ? '#232936' : '#e0e3eb',
-            }}
-            className="border px-2.5 py-0.5 rounded flex items-center gap-1.5 font-mono"
-          >
-            <span className="text-[10px] text-gray-500 font-sans">Cash:</span>
-            <span className="font-bold text-[#089981]">
-              ₹{walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-
-          <button
-            onClick={resetWallet}
-            title="Reset Virtual Balance"
-            className="p-1 text-gray-400 hover:text-white rounded cursor-pointer"
+          <button 
+            onClick={() => window.location.reload()} 
+            className="p-1 hover:text-white hover:bg-slate-800 rounded cursor-pointer transition"
+            title="Reload Chart"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-
-          <button title="Take Snapshot" className="p-1 text-gray-400 hover:text-white rounded">
-            <Camera className="w-4 h-4" />
+          <button 
+            className="p-1 hover:text-white hover:bg-slate-800 rounded cursor-pointer transition hidden sm:block"
+            title="Screenshot"
+          >
+            <Camera className="w-3.5 h-3.5" />
           </button>
-          <button title="Fullscreen" className="p-1 text-gray-400 hover:text-white rounded">
-            <Maximize2 className="w-4 h-4" />
+          <button 
+            onClick={toggleFullScreen} 
+            className="p-1 hover:text-white hover:bg-slate-800 rounded cursor-pointer transition"
+            title="Full Screen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
           </button>
         </div>
-      </header>
-
-      <OptionChainModal isOpen={isOptionChainOpen} onClose={() => setIsOptionChainOpen(false)} />
-    </>
+      </div>
+    </header>
   );
 }

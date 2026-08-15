@@ -1,246 +1,173 @@
 import { useState } from 'react';
-import { X, ShieldAlert, Target } from 'lucide-react';
+import { X, ShieldCheck } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
 export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock }) {
-  const [orderType] = useState(initialType);
-  const [productType, setProductType] = useState('Trading'); // 'Trading' (Intraday) | 'Investing' (Delivery) | 'MTF'
-  const [quantity, setQuantity] = useState(50);
-  const [priceType, setPriceType] = useState('Market');
-  const [limitPrice, setLimitPrice] = useState(stock?.price || 0);
+  const store = useTradingStore();
+  const executeOrder = store?.executeOrder || (() => {});
+  const cash = store?.cash ?? 1000000;
 
-  // Stop-Loss & Target Toggles and Values
-  const [isSLActive, setIsSLActive] = useState(false);
-  const [stopLossPrice, setStopLossPrice] = useState(
-    stock?.price ? (initialType === 'BUY' ? (stock.price * 0.985).toFixed(2) : (stock.price * 1.015).toFixed(2)) : ''
-  );
-  const [isTargetActive, setIsTargetActive] = useState(false);
-  const [targetPrice, setTargetPrice] = useState(
-    stock?.price ? (initialType === 'BUY' ? (stock.price * 1.025).toFixed(2) : (stock.price * 0.975).toFixed(2)) : ''
-  );
+  const [orderType, setOrderType] = useState(initialType);
+  const [productType, setProductType] = useState('INTRADAY'); // INTRADAY | DELIVERY | MTF
+  const [orderCategory, setOrderCategory] = useState('MARKET'); // MARKET | LIMIT
+  const [quantity, setQuantity] = useState(1);
+  const [customPrice, setCustomPrice] = useState('');
 
-  const { walletBalance, buyStock, sellStock, theme } = useTradingStore();
-  const isDark = theme === 'dark' || theme === 'midnight';
+  if (!isOpen) return null;
 
-  if (!isOpen || !stock) return null;
-
-  const currentPrice = priceType === 'Market' ? stock.price : parseFloat(limitPrice) || stock.price;
-  const leverage = productType === 'Trading' ? 0.20 : productType === 'MTF' ? 0.25 : 1.0;
-  const requiredMargin = quantity * currentPrice * leverage;
-
-  const handleExecuteOrder = (e) => {
-    e.preventDefault();
-    const finalSL = isSLActive ? parseFloat(stopLossPrice) : null;
-    const finalTarget = isTargetActive ? parseFloat(targetPrice) : null;
-
-    const isExecuted =
-      orderType === 'BUY'
-        ? buyStock(stock.symbol, stock.name, Number(quantity), currentPrice, productType, finalTarget, finalSL)
-        : sellStock(stock.symbol, stock.name, Number(quantity), currentPrice, productType, finalTarget, finalSL);
-
-    if (isExecuted) {
-      onClose();
-    }
-  };
-
+  const currentPrice = Number(stock?.price || 1000);
+  const effectivePrice = orderCategory === 'LIMIT' && customPrice !== '' ? Number(customPrice) : currentPrice;
+  const totalCost = Number(quantity || 1) * effectivePrice;
   const isBuy = orderType === 'BUY';
 
+  const handleOrderSubmit = (e) => {
+    e.preventDefault();
+    executeOrder({
+      type: orderType,
+      symbol: stock?.symbol || 'STOCK',
+      qty: Number(quantity) || 1,
+      price: effectivePrice,
+      product: productType,
+    });
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-xs font-sans">
-      <div
-        style={{
-          backgroundColor: isDark ? '#151922' : '#ffffff',
-          borderColor: isDark ? '#232936' : '#e0e3eb',
-          color: isDark ? '#ffffff' : '#131722',
-        }}
-        className="w-[420px] rounded-xl border shadow-2xl overflow-hidden text-xs"
-      >
-        {/* Header */}
-        <div
-          style={{
-            backgroundColor: isBuy ? '#2962ff' : '#f23645',
-          }}
-          className="p-3 text-white flex items-center justify-between"
-        >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in select-none">
+      <div className="bg-[#111726] border border-[#1E293B] w-full max-w-md rounded-xl shadow-2xl overflow-hidden text-slate-200 text-xs">
+        
+        {/* Modal Header */}
+        <div className={`px-4 py-3 flex items-center justify-between border-b border-[#1E293B] ${isBuy ? 'bg-[#00897B]/10' : 'bg-[#EF5350]/10'}`}>
           <div className="flex items-center gap-2">
-            <span className="font-bold text-sm tracking-wide">{orderType}</span>
-            <span className="font-bold text-sm">{stock.symbol}</span>
-            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono">₹{stock.price.toFixed(2)}</span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${isBuy ? 'bg-[#00897B]' : 'bg-[#EF5350]'}`}>
+              {orderType}
+            </span>
+            <div>
+              <span className="font-bold text-sm text-white">{stock?.symbol || 'STOCK'}</span>
+              <span className="text-[11px] text-slate-400 ml-1.5">NSE • ₹{currentPrice.toFixed(2)}</span>
+            </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white cursor-pointer">
+          <button 
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleExecuteOrder} className="p-4 space-y-3">
-          {/* Product Type (Trading vs Investing) */}
-          <div
-            style={{ backgroundColor: isDark ? '#0B0E14' : '#f0f3fa' }}
-            className="grid grid-cols-3 p-1 rounded-lg font-semibold"
-          >
-            {['Trading', 'Investing', 'MTF'].map((tab) => (
+        <form onSubmit={handleOrderSubmit} className="p-4 space-y-4">
+          {/* Order Type Toggle (BUY / SELL) */}
+          <div className="grid grid-cols-2 gap-2 bg-[#0B0E14] p-1 rounded-lg border border-[#1E293B]">
+            <button
+              type="button"
+              onClick={() => setOrderType('BUY')}
+              className={`py-1.5 rounded text-xs font-bold transition cursor-pointer ${
+                isBuy ? 'bg-[#00897B] text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              BUY
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderType('SELL')}
+              className={`py-1.5 rounded text-xs font-bold transition cursor-pointer ${
+                !isBuy ? 'bg-[#EF5350] text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              SELL
+            </button>
+          </div>
+
+          {/* Product Tabs (Intraday, Delivery, MTF) */}
+          <div>
+            <label className="text-[11px] text-slate-400 mb-1.5 block font-semibold">Product Type</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { id: 'INTRADAY', label: 'Intraday', sub: 'MIS • 5x' },
+                { id: 'DELIVERY', label: 'Delivery', sub: 'CNC • 1x' },
+                { id: 'MTF', label: 'MTF', sub: 'Pay 25%' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProductType(p.id)}
+                  className={`p-2 rounded border text-left cursor-pointer transition ${
+                    productType === p.id 
+                      ? 'border-blue-500 bg-blue-500/10 text-white' 
+                      : 'border-[#1E293B] bg-[#0B0E14] text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="font-bold text-xs">{p.label}</div>
+                  <div className="text-[9px] text-slate-500">{p.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Order Category (Market / Limit) */}
+          <div className="flex items-center gap-2 border-b border-[#1E293B] pb-3">
+            {['MARKET', 'LIMIT'].map((cat) => (
               <button
+                key={cat}
                 type="button"
-                key={tab}
-                onClick={() => setProductType(tab)}
-                className={`py-1.5 rounded text-center transition-all cursor-pointer ${
-                  productType === tab
-                    ? 'bg-white text-black shadow-xs font-bold'
-                    : 'text-gray-400 hover:text-inherit'
+                onClick={() => setOrderCategory(cat)}
+                className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition ${
+                  orderCategory === cat ? 'bg-slate-800 text-white border border-slate-700' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {tab === 'Trading' ? 'Intraday 5X' : tab === 'Investing' ? 'Delivery' : 'MTF 4X'}
+                {cat}
               </button>
             ))}
           </div>
 
-          {/* Quantity & Price Row */}
+          {/* Quantity & Price Inputs */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-gray-400 block mb-1 font-medium">Quantity</label>
+              <label className="text-[11px] text-slate-400 mb-1 block font-semibold">Quantity (Qty)</label>
               <input
                 type="number"
                 min="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                style={{
-                  backgroundColor: isDark ? '#0B0E14' : '#f0f3fa',
-                  borderColor: isDark ? '#232936' : '#e0e3eb',
-                }}
-                className="w-full border rounded-lg px-3 py-1.5 font-mono font-bold text-sm outline-none focus:border-[#2962ff]"
+                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-full bg-[#0B0E14] border border-[#1E293B] focus:border-blue-500 rounded p-2 text-white font-mono text-xs outline-none"
               />
             </div>
             <div>
-              <label className="text-gray-400 block mb-1 font-medium">Order Type</label>
-              <div
-                style={{ backgroundColor: isDark ? '#0B0E14' : '#f0f3fa' }}
-                className="grid grid-cols-2 p-1 rounded-lg font-medium"
-              >
-                <button
-                  type="button"
-                  onClick={() => setPriceType('Market')}
-                  className={`py-1 rounded cursor-pointer ${
-                    priceType === 'Market' ? 'bg-white text-black font-bold shadow-xs' : 'text-gray-400'
-                  }`}
-                >
-                  Market
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPriceType('Limit')}
-                  className={`py-1 rounded cursor-pointer ${
-                    priceType === 'Limit' ? 'bg-white text-black font-bold shadow-xs' : 'text-gray-400'
-                  }`}
-                >
-                  Limit
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Limit Price Input if Limit selected */}
-          {priceType === 'Limit' && (
-            <div>
-              <label className="text-gray-400 block mb-1 font-medium">Limit Price (₹)</label>
+              <label className="text-[11px] text-slate-400 mb-1 block font-semibold">Price (₹)</label>
               <input
                 type="number"
                 step="0.05"
-                value={limitPrice}
-                onChange={(e) => setLimitPrice(e.target.value)}
-                style={{
-                  backgroundColor: isDark ? '#0B0E14' : '#f0f3fa',
-                  borderColor: isDark ? '#232936' : '#e0e3eb',
-                }}
-                className="w-full border rounded-lg px-3 py-1.5 font-mono font-bold text-sm outline-none focus:border-[#2962ff]"
+                disabled={orderCategory === 'MARKET'}
+                value={orderCategory === 'MARKET' ? currentPrice : (customPrice || currentPrice)}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                className={`w-full bg-[#0B0E14] border border-[#1E293B] focus:border-blue-500 rounded p-2 text-white font-mono text-xs outline-none ${
+                  orderCategory === 'MARKET' ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
               />
             </div>
-          )}
+          </div>
 
-          {/* STAGE 7: AUTO STOP-LOSS & TARGET TOGGLES */}
-          <div
-            style={{
-              backgroundColor: isDark ? '#0B0E14' : '#fafbfc',
-              borderColor: isDark ? '#232936' : '#e0e3eb',
-            }}
-            className="p-2.5 rounded-lg border space-y-2"
-          >
-            {/* Stop-Loss Row */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isSLActive}
-                  onChange={(e) => setIsSLActive(e.target.checked)}
-                  className="accent-[#f23645] rounded"
-                />
-                <ShieldAlert className="w-3.5 h-3.5 text-[#f23645]" />
-                <span>Stop-Loss (SL)</span>
-              </label>
-              {isSLActive && (
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-400 font-mono">₹</span>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={stopLossPrice}
-                    onChange={(e) => setStopLossPrice(e.target.value)}
-                    className="w-24 px-2 py-0.5 rounded border border-[#f23645]/40 font-mono font-bold text-right outline-none bg-transparent"
-                  />
-                </div>
-              )}
+          {/* Margin & Cash Summary */}
+          <div className="bg-[#0B0E14] p-2.5 rounded-lg border border-[#1E293B] flex items-center justify-between text-[11px]">
+            <div>
+              <span className="text-slate-400">Required Margin: </span>
+              <span className="font-bold text-white font-mono">₹{totalCost.toFixed(2)}</span>
             </div>
-
-            {/* Target Row */}
-            <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: isDark ? '#232936' : '#e0e3eb' }}>
-              <label className="flex items-center gap-1.5 font-semibold cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isTargetActive}
-                  onChange={(e) => setIsTargetActive(e.target.checked)}
-                  className="accent-[#089981] rounded"
-                />
-                <Target className="w-3.5 h-3.5 text-[#089981]" />
-                <span>Target (Take Profit)</span>
-              </label>
-              {isTargetActive && (
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-400 font-mono">₹</span>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={targetPrice}
-                    onChange={(e) => setTargetPrice(e.target.value)}
-                    className="w-24 px-2 py-0.5 rounded border border-[#089981]/40 font-mono font-bold text-right outline-none bg-transparent"
-                  />
-                </div>
-              )}
+            <div>
+              <span className="text-slate-400">Available: </span>
+              <span className="font-bold text-emerald-400 font-mono">₹{Number(cash).toLocaleString('en-IN')}</span>
             </div>
           </div>
 
-          {/* Margin Calculation Summary */}
-          <div
-            style={{ borderColor: isDark ? '#232936' : '#e0e3eb' }}
-            className="border-t pt-2 space-y-1 font-mono text-[11px]"
-          >
-            <div className="flex justify-between text-gray-400 font-sans">
-              <span>Required Margin:</span>
-              <span className="font-bold text-inherit">₹{requiredMargin.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-gray-400 font-sans">
-              <span>Available Cash:</span>
-              <span className="font-bold text-[#089981]">₹{walletBalance.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {/* Submit Action Button */}
+          {/* Action Submit Button */}
           <button
             type="submit"
-            style={{
-              backgroundColor: isBuy ? '#2962ff' : '#f23645',
-            }}
-            className="w-full py-2.5 rounded-lg text-white font-bold text-xs uppercase tracking-wider transition-all hover:opacity-90 active:scale-98 shadow-md cursor-pointer"
+            className={`w-full py-2.5 rounded-lg font-bold text-white text-xs shadow-lg transition active:scale-[0.99] cursor-pointer flex items-center justify-center gap-1.5 ${
+              isBuy ? 'bg-[#00897B] hover:bg-[#00796B]' : 'bg-[#EF5350] hover:bg-[#E53935]'
+            }`}
           >
-            {orderType} {quantity} Qty
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>INSTANT {orderType} ({stock?.symbol || 'STOCK'})</span>
           </button>
         </form>
       </div>
