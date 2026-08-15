@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as LightweightCharts from 'lightweight-charts';
 import { GripVertical, X } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
@@ -63,20 +63,24 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const dragOffset = useRef({ x: 0, y: 0 });
 
   const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
+  const [pillTop, setPillTop] = useState(null); // Dynamic Y-coordinate on chart for Position Marker
 
   const store = useTradingStore();
   const { theme, updateStockPrice, positions = [], closePosition } = store;
   const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 1045.60);
+  const stockPrice = parseNum(activeStock?.price, 1047.36);
   const stockChange = parseNum(activeStock?.change, 16.80);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
   // Active Position for Current Stock
-  const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty > 0);
+  const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty !== 0);
   const positionAvgPrice = currentStockPosition?.avgPrice || 0;
-  const positionQty = currentStockPosition?.qty || 0;
-  const positionPnL = currentStockPosition ? (stockPrice - positionAvgPrice) * positionQty : 0;
+  const positionQty = Math.abs(currentStockPosition?.qty || 0);
+  const isLong = (currentStockPosition?.qty || 0) > 0;
+  const positionPnL = currentStockPosition 
+    ? (isLong ? (stockPrice - positionAvgPrice) : (positionAvgPrice - stockPrice)) * positionQty 
+    : 0;
   const isPosPnL = positionPnL >= 0;
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
@@ -85,6 +89,22 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const textColor = isDark ? '#8E9AA8' : '#131722';
   const gridColor = theme === 'midnight' ? '#141414' : isDark ? '#1E2533' : '#f0f3fa';
   const borderColor = isDark ? '#232936' : '#e0e3eb';
+
+  // Recalculate dynamic Y coordinate of position price line on chart
+  const updatePillCoordinate = useCallback(() => {
+    if (!candleSeriesRef.current || !positionAvgPrice) {
+      setPillTop(null);
+      return;
+    }
+    try {
+      const y = candleSeriesRef.current.priceToCoordinate(positionAvgPrice);
+      if (y !== null && !isNaN(y)) {
+        setPillTop(y);
+      }
+    } catch {
+      setPillTop(null);
+    }
+  }, [positionAvgPrice]);
 
   const handleWidgetMouseDown = (e) => {
     isDraggingWidget.current = true;
@@ -147,7 +167,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           secondsVisible: false,
           barSpacing: timeframe === '1M' ? 14 : timeframe === '1W' ? 10 : 8,
           minBarSpacing: 2,
-          rightOffset: 15,
+          rightOffset: 25,
           fixLeftEdge: false,
           fixRightEdge: false,
         },
@@ -279,6 +299,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     if (ema21) ema21.setData(calculateAccurateEMA(formattedData, 21));
     if (ema50) ema50.setData(calculateAccurateEMA(formattedData, 50));
 
+    // Crosshair and Scroll listener to re-align on-chart floating pill
     chartInstance.subscribeCrosshairMove((param) => {
       if (param && param.time && param.seriesData && candleSeries) {
         const data = param.seriesData.get(candleSeries);
@@ -286,7 +307,14 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       } else if (currentCandleRef.current) {
         setOhlc(currentCandleRef.current);
       }
+      updatePillCoordinate();
     });
+
+    if (chartInstance.timeScale()) {
+      chartInstance.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        updatePillCoordinate();
+      });
+    }
 
     chartRef.current = chartInstance;
     candleSeriesRef.current = candleSeries;
@@ -295,7 +323,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
-    // Real-Time Live Ticks
+    // Real-Time Live Ticks Simulation
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
       const delta = (Math.random() - 0.48) * 0.9;
@@ -316,6 +344,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       if (typeof updateStockPrice === 'function') {
         updateStockPrice(stockSymbol, newClose);
       }
+      updatePillCoordinate();
     }, 1200);
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -323,12 +352,16 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       const { width: w, height: h } = entries[0].contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: w, height: h });
+        updatePillCoordinate();
       }
     });
 
     if (chartContainerRef.current) {
       resizeObserver.observe(chartContainerRef.current);
     }
+
+    // Initial position pill positioning
+    setTimeout(updatePillCoordinate, 150);
 
     return () => {
       clearInterval(tickInterval);
@@ -339,7 +372,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockSymbol, timeframe, theme]);
+  }, [stockSymbol, timeframe, theme, updatePillCoordinate]);
 
   // Sync Chart Dynamic Price Line with Buy Position
   useEffect(() => {
@@ -358,10 +391,11 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         lineWidth: 2,
         lineStyle: 0, // Solid
         axisLabelVisible: true,
-        title: `BUY ${positionQty} @ ₹${positionAvgPrice.toFixed(2)}`,
+        title: `${isLong ? 'BUY' : 'SELL'} ${positionQty} @ ₹${positionAvgPrice.toFixed(2)}`,
       });
+      updatePillCoordinate();
     }
-  }, [currentStockPosition, positionAvgPrice, positionQty, isPosPnL]);
+  }, [currentStockPosition, positionAvgPrice, positionQty, isLong, isPosPnL, updatePillCoordinate]);
 
   useEffect(() => {
     if (ema9SeriesRef.current) ema9SeriesRef.current.applyOptions({ visible: showEMA9 });
@@ -376,7 +410,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       style={{ backgroundColor: bgColor }}
       className="w-full h-full relative overflow-hidden select-none"
     >
-      {/* Floating Buy/Sell Order Pill */}
+      {/* Top Fixed Buy/Sell Order Pill */}
       <div className="absolute top-2 left-3 z-30 flex items-center gap-1 shadow-md font-sans">
         <button
           onClick={() => onOpenOrder && onOpenOrder('SELL')}
@@ -424,34 +458,40 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </div>
       </div>
 
-      {/* ON-CHART LIVE POSITION PILL & SQUARE-OFF BUTTON */}
-      {currentStockPosition && (
+      {/* PRO TRADINGVIEW STYLE ON-LINE FLOATING POSITION PILL & 1-CLICK EXIT */}
+      {currentStockPosition && pillTop !== null && pillTop > 0 && (
         <div
-          className={`absolute top-12 left-3 z-30 flex items-center gap-2 px-2.5 py-1 rounded-md shadow-xl border text-xs font-mono backdrop-blur-md transition-all ${
+          style={{
+            top: `${pillTop - 14}px`, // Perfectly centered on top of entry horizontal line
+            right: '90px',           // Placed right next to candle & price scale
+          }}
+          className={`absolute z-30 flex items-center gap-2 px-2 py-0.5 rounded shadow-2xl border text-[11px] font-mono backdrop-blur-md transition-all duration-75 ${
             isPosPnL 
-              ? 'bg-[#089981]/20 border-[#089981]/60 text-emerald-300' 
-              : 'bg-[#f23645]/20 border-[#f23645]/60 text-rose-300'
+              ? 'bg-[#089981]/90 border-[#089981] text-white shadow-emerald-900/50' 
+              : 'bg-[#f23645]/90 border-[#f23645] text-white shadow-rose-900/50'
           }`}
         >
+          {/* Position Type & Qty */}
           <div className="flex items-center gap-1 font-bold">
-            <span className="bg-blue-600 text-white px-1 rounded text-[10px]">BUY</span>
-            <span>{positionQty} Qty @ ₹{positionAvgPrice.toFixed(2)}</span>
+            <span className="bg-black/30 px-1 py-0.2 rounded text-[10px]">{isLong ? 'BUY' : 'SELL'}</span>
+            <span>{positionQty} Qty</span>
           </div>
 
-          <div className="border-l border-slate-600/60 pl-2 flex items-center gap-1 font-bold">
-            <span>P&L:</span>
-            <span className={isPosPnL ? 'text-[#089981]' : 'text-[#f23645]'}>
+          {/* Realtime Live P&L (Moves dynamically with candles) */}
+          <div className="border-l border-white/30 pl-1.5 font-bold">
+            <span>P&L: </span>
+            <span>
               {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)} ({isPosPnL ? '+' : ''}{(((stockPrice - positionAvgPrice) / positionAvgPrice) * 100).toFixed(2)}%)
             </span>
           </div>
 
-          {/* Direct 1-Click Close Position ('X') on Chart */}
+          {/* Direct 1-Click Fast Exit Button */}
           <button
             onClick={() => closePosition(stockSymbol, currentStockPosition.product)}
-            title="Square Off Position Immediately"
-            className="ml-1 p-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-white transition cursor-pointer flex items-center justify-center"
+            title="Square Off Position (Exit Now)"
+            className="ml-1 p-0.5 rounded bg-black/40 hover:bg-black/80 text-white transition-all cursor-pointer flex items-center justify-center active:scale-90"
           >
-            <X className="w-3 h-3" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
