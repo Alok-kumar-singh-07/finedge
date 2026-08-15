@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
+import * as LightweightCharts from 'lightweight-charts';
 import { GripVertical } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
@@ -107,11 +107,14 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const width = chartContainerRef.current.clientWidth || 700;
     const height = chartContainerRef.current.clientHeight || 450;
 
-    const chart = createChart(chartContainerRef.current, {
+    const chart = LightweightCharts.createChart(chartContainerRef.current, {
       width,
       height,
       layout: {
-        background: { color: bgColor },
+        background: { 
+          type: LightweightCharts.ColorType ? LightweightCharts.ColorType.Solid : 'solid',
+          color: bgColor 
+        },
         textColor: textColor,
       },
       grid: {
@@ -150,69 +153,60 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       },
     });
 
+    // Universal Series Creation (Handles both v4 and v5 seamlessly)
     let candleSeries;
-    if (typeof chart.addSeries === 'function' && CandlestickSeries) {
-      candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#089981',
-        downColor: '#f23645',
-        borderVisible: true,
-        borderUpColor: '#089981',
-        borderDownColor: '#f23645',
-        wickUpColor: '#089981',
-        wickDownColor: '#f23645',
-        priceLineVisible: true,
-        priceLineColor: '#f23645',
-        priceLineWidth: 1,
-        priceLineStyle: 2,
-      });
-    } else if (typeof chart.addCandlestickSeries === 'function') {
-      candleSeries = chart.addCandlestickSeries({
-        upColor: '#089981',
-        downColor: '#f23645',
-        borderVisible: true,
-        borderUpColor: '#089981',
-        borderDownColor: '#f23645',
-        wickUpColor: '#089981',
-        wickDownColor: '#f23645',
-        priceLineVisible: true,
-        priceLineColor: '#f23645',
-        priceLineWidth: 1,
-        priceLineStyle: 2,
-      });
+    const candleOptions = {
+      upColor: '#089981',
+      downColor: '#f23645',
+      borderVisible: true,
+      borderUpColor: '#089981',
+      borderDownColor: '#f23645',
+      wickUpColor: '#089981',
+      wickDownColor: '#f23645',
+      priceLineVisible: true,
+      priceLineColor: '#f23645',
+      priceLineWidth: 1,
+      priceLineStyle: 2,
+    };
+
+    if (typeof chart.addCandlestickSeries === 'function') {
+      candleSeries = chart.addCandlestickSeries(candleOptions);
+    } else if (typeof chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
+      candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, candleOptions);
     }
 
     let volumeSeries;
-    if (typeof chart.addSeries === 'function' && HistogramSeries) {
-      volumeSeries = chart.addSeries(HistogramSeries, {
-        color: '#089981',
-        priceFormat: { type: 'volume' },
-        priceScaleId: '',
-      });
-      volumeSeries.priceScale().applyOptions({
-        scaleMargins: { top: 0.82, bottom: 0 },
-      });
-    } else if (typeof chart.addHistogramSeries === 'function') {
-      volumeSeries = chart.addHistogramSeries({
-        color: '#089981',
-        priceFormat: { type: 'volume' },
-        priceScaleId: '',
-      });
+    const volumeOptions = {
+      color: '#089981',
+      priceFormat: { type: 'volume' },
+      priceScaleId: '',
+    };
+
+    if (typeof chart.addHistogramSeries === 'function') {
+      volumeSeries = chart.addHistogramSeries(volumeOptions);
+    } else if (typeof chart.addSeries === 'function' && LightweightCharts.HistogramSeries) {
+      volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, volumeOptions);
+    }
+
+    if (volumeSeries && typeof volumeSeries.priceScale === 'function') {
       volumeSeries.priceScale().applyOptions({
         scaleMargins: { top: 0.82, bottom: 0 },
       });
     }
 
-    let ema9;
-    let ema21;
-    let ema50;
-    if (typeof chart.addSeries === 'function' && LineSeries) {
-      ema9 = chart.addSeries(LineSeries, { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true });
-      ema21 = chart.addSeries(LineSeries, { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true });
-      ema50 = chart.addSeries(LineSeries, { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true });
-    } else if (typeof chart.addLineSeries === 'function') {
-      ema9 = chart.addLineSeries({ color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true });
-      ema21 = chart.addLineSeries({ color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true });
-      ema50 = chart.addLineSeries({ color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true });
+    let ema9, ema21, ema50;
+    const opt9 = { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true };
+    const opt21 = { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true };
+    const opt50 = { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true };
+
+    if (typeof chart.addLineSeries === 'function') {
+      ema9 = chart.addLineSeries(opt9);
+      ema21 = chart.addLineSeries(opt21);
+      ema50 = chart.addLineSeries(opt50);
+    } else if (typeof chart.addSeries === 'function' && LightweightCharts.LineSeries) {
+      ema9 = chart.addSeries(LightweightCharts.LineSeries, opt9);
+      ema21 = chart.addSeries(LightweightCharts.LineSeries, opt21);
+      ema50 = chart.addSeries(LightweightCharts.LineSeries, opt50);
     }
 
     let currentWalkPrice = stockPrice;
@@ -345,7 +339,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       {/* Floating Buy/Sell Order Pill */}
       <div className="absolute top-2 left-3 z-20 flex items-center gap-1 shadow-xs font-sans">
         <button
-          onClick={() => onOpenOrder('SELL')}
+          onClick={() => onOpenOrder && onOpenOrder('SELL')}
           className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-2 py-0.5 rounded-l text-[10px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
         >
           <span>{stockPrice.toFixed(2)}</span>
@@ -364,7 +358,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </div>
 
         <button
-          onClick={() => onOpenOrder('BUY')}
+          onClick={() => onOpenOrder && onOpenOrder('BUY')}
           className="bg-[#2962ff] hover:bg-[#1e53e5] text-white px-2 py-0.5 rounded-r text-[10px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
         >
           <span>{stockPrice.toFixed(2)}</span>
