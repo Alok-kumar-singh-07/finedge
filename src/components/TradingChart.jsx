@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as LightweightCharts from 'lightweight-charts';
 import { GripVertical, X } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
@@ -43,11 +43,52 @@ function formatDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatCurrencyCompact(num) {
-  if (!num || isNaN(num)) return '₹0';
-  if (num >= 100000) return `₹${(num / 100000).toFixed(2)}L`;
-  if (num >= 1000) return `₹${(num / 1000).toFixed(1)}k`;
-  return `₹${num.toFixed(0)}`;
+// Pure helper function outside component scope
+function generateCandleData(stockPrice, timeframe) {
+  let currentWalkPrice = stockPrice;
+  const generatedReversed = [];
+  const volumeData = [];
+  const now = new Date();
+  const totalBars = timeframe === '1M' ? 120 : timeframe === '1W' ? 200 : 250;
+
+  for (let i = 0; i < totalBars; i++) {
+    let time;
+    if (timeframe === '1M') {
+      time = formatDate(new Date(now.getFullYear(), now.getMonth() - i, 1));
+    } else if (timeframe === '1W') {
+      time = formatDate(new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000));
+    } else if (timeframe === '1D') {
+      time = formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000));
+    } else {
+      const sec = timeframe === '1m' ? 60 : timeframe === '5m' ? 300 : 900;
+      time = Math.floor(now.getTime() / 1000) - i * sec;
+    }
+
+    const pseudoRand1 = Math.random();
+    const pseudoRand2 = Math.random();
+    const pseudoRand3 = Math.random();
+
+    const stepChange = (pseudoRand1 - 0.49) * (currentWalkPrice * 0.012);
+    const open = parseFloat((currentWalkPrice - stepChange).toFixed(2));
+    const close = parseFloat(currentWalkPrice.toFixed(2));
+    const high = parseFloat((Math.max(open, close) + pseudoRand2 * (currentWalkPrice * 0.008)).toFixed(2));
+    const low = parseFloat((Math.min(open, close) - pseudoRand3 * (currentWalkPrice * 0.008)).toFixed(2));
+
+    generatedReversed.push({ time, open, high, low, close });
+    currentWalkPrice = open;
+  }
+
+  const formattedData = generatedReversed.reverse();
+
+  formattedData.forEach((bar) => {
+    volumeData.push({
+      time: bar.time,
+      value: Math.floor(Math.random() * 600000) + 100000,
+      color: bar.close >= bar.open ? '#08998144' : '#f2364544',
+    });
+  });
+
+  return { formattedData, volumeData };
 }
 
 export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrder }) {
@@ -76,20 +117,16 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const { theme, updateStockPrice, positions = [], closePosition } = store;
   const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 1047.87);
+  const stockPrice = parseNum(activeStock?.price, 1042.26);
   const stockChange = parseNum(activeStock?.change, 16.80);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
-  // Active Position details
+  // Active Position Details
   const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty !== 0);
   const positionAvgPrice = currentStockPosition?.avgPrice || 0;
   const positionQty = Math.abs(currentStockPosition?.qty || 0);
   const isLong = (currentStockPosition?.qty || 0) > 0;
   const productType = currentStockPosition?.product || 'INTRADAY';
-  
-  // Margin Used calculation
-  const leverage = productType === 'INTRADAY' ? 5 : productType === 'MTF' ? 4 : 1;
-  const marginUsed = currentStockPosition?.marginBlocked || ((positionQty * positionAvgPrice) / leverage);
 
   const positionPnL = currentStockPosition 
     ? (isLong ? (stockPrice - positionAvgPrice) : (positionAvgPrice - stockPrice)) * positionQty 
@@ -103,7 +140,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const gridColor = theme === 'midnight' ? '#141414' : isDark ? '#1E2533' : '#f0f3fa';
   const borderColor = isDark ? '#232936' : '#e0e3eb';
 
-  const updatePillCoordinate = useCallback(() => {
+  const syncPillYCoordinate = () => {
     if (!candleSeriesRef.current || !positionAvgPrice) {
       setPillTop(null);
       return;
@@ -116,7 +153,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     } catch {
       setPillTop(null);
     }
-  }, [positionAvgPrice]);
+  };
 
   const handleWidgetMouseDown = (e) => {
     isDraggingWidget.current = true;
@@ -258,36 +295,8 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const ema21 = addSeriesHelper('Line', { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true });
     const ema50 = addSeriesHelper('Line', { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true });
 
-    let currentWalkPrice = stockPrice;
-    const generatedReversed = [];
-    const volumeData = [];
-    const now = new Date();
-    const totalBars = timeframe === '1M' ? 120 : timeframe === '1W' ? 200 : 250;
-
-    for (let i = 0; i < totalBars; i++) {
-      let time;
-      if (timeframe === '1M') {
-        time = formatDate(new Date(now.getFullYear(), now.getMonth() - i, 1));
-      } else if (timeframe === '1W') {
-        time = formatDate(new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000));
-      } else if (timeframe === '1D') {
-        time = formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000));
-      } else {
-        const sec = timeframe === '1m' ? 60 : timeframe === '5m' ? 300 : 900;
-        time = Math.floor(now.getTime() / 1000) - i * sec;
-      }
-
-      const stepChange = (Math.random() - 0.49) * (currentWalkPrice * 0.012);
-      const open = parseFloat((currentWalkPrice - stepChange).toFixed(2));
-      const close = parseFloat(currentWalkPrice.toFixed(2));
-      const high = parseFloat((Math.max(open, close) + Math.random() * (currentWalkPrice * 0.008)).toFixed(2));
-      const low = parseFloat((Math.min(open, close) - Math.random() * (currentWalkPrice * 0.008)).toFixed(2));
-
-      generatedReversed.push({ time, open, high, low, close });
-      currentWalkPrice = open;
-    }
-
-    const formattedData = generatedReversed.reverse();
+    // Generate historical candles cleanly via pure helper
+    const { formattedData, volumeData } = generateCandleData(stockPrice, timeframe);
     const lastCandle = formattedData[formattedData.length - 1];
     currentCandleRef.current = lastCandle;
 
@@ -296,14 +305,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         setOhlc(lastCandle);
       });
     }
-
-    formattedData.forEach((bar) => {
-      volumeData.push({
-        time: bar.time,
-        value: Math.floor(Math.random() * 600000) + 100000,
-        color: bar.close >= bar.open ? '#08998144' : '#f2364544',
-      });
-    });
 
     if (candleSeries) candleSeries.setData(formattedData);
     if (volumeSeries) volumeSeries.setData(volumeData);
@@ -318,12 +319,12 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       } else if (currentCandleRef.current) {
         setOhlc(currentCandleRef.current);
       }
-      updatePillCoordinate();
+      syncPillYCoordinate();
     });
 
     if (chartInstance.timeScale()) {
       chartInstance.timeScale().subscribeVisibleLogicalRangeChange(() => {
-        updatePillCoordinate();
+        syncPillYCoordinate();
       });
     }
 
@@ -334,7 +335,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
-    // Real-Time Live Ticks Simulation
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
       const delta = (Math.random() - 0.48) * 0.9;
@@ -355,7 +355,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       if (typeof updateStockPrice === 'function') {
         updateStockPrice(stockSymbol, newClose);
       }
-      updatePillCoordinate();
+      syncPillYCoordinate();
     }, 1200);
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -363,7 +363,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       const { width: w, height: h } = entries[0].contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: w, height: h });
-        updatePillCoordinate();
+        syncPillYCoordinate();
       }
     });
 
@@ -371,7 +371,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       resizeObserver.observe(chartContainerRef.current);
     }
 
-    setTimeout(updatePillCoordinate, 150);
+    setTimeout(syncPillYCoordinate, 150);
 
     return () => {
       clearInterval(tickInterval);
@@ -382,9 +382,9 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockSymbol, timeframe, theme, updatePillCoordinate]);
+  }, [stockSymbol, timeframe, theme, positionAvgPrice]);
 
-  // Sync Chart Dynamic Price Line with Buy/Sell Position
+  // Sync Chart Dynamic Price Line with Position Entry
   useEffect(() => {
     if (!candleSeriesRef.current) return;
 
@@ -398,14 +398,15 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       positionLineRef.current = candleSeriesRef.current.createPriceLine({
         price: positionAvgPrice,
         color: lineColor,
-        lineWidth: 2,
+        lineWidth: 1.5,
         lineStyle: 0,
         axisLabelVisible: true,
-        title: `${isLong ? 'BUY' : 'SELL'} [${productType}] ${positionQty} @ ₹${positionAvgPrice.toFixed(2)}`,
+        title: `${isLong ? 'BUY' : 'SELL'} @ ₹${positionAvgPrice.toFixed(2)}`,
       });
-      updatePillCoordinate();
+      syncPillYCoordinate();
     }
-  }, [currentStockPosition, positionAvgPrice, positionQty, isLong, productType, isPosPnL, updatePillCoordinate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStockPosition, positionAvgPrice, isLong, isPosPnL]);
 
   useEffect(() => {
     if (ema9SeriesRef.current) ema9SeriesRef.current.applyOptions({ visible: showEMA9 });
@@ -468,52 +469,36 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </div>
       </div>
 
-      {/* ON-CANDLE FLOATING POSITION PILL WITH PRODUCT TYPE & MARGIN USED BADGE */}
+      {/* ULTRA-COMPACT SLEEK ON-CHART POSITION PILL */}
       {currentStockPosition && pillTop !== null && pillTop > 0 && (
         <div
           style={{
-            top: `${pillTop - 14}px`,
+            top: `${pillTop - 11}px`,
             right: '90px',
           }}
-          className={`absolute z-30 flex items-center gap-2 px-2.5 py-0.5 rounded-full shadow-2xl border text-[11px] font-mono backdrop-blur-md transition-all duration-75 ${
+          className={`absolute z-30 flex items-center gap-1.5 px-2 py-0.5 rounded-full shadow-lg border text-[10px] font-mono backdrop-blur-md transition-all duration-75 ${
             isPosPnL 
-              ? 'bg-[#089981]/95 border-[#089981] text-white shadow-emerald-900/60' 
-              : 'bg-[#f23645]/95 border-[#f23645] text-white shadow-rose-900/60'
+              ? 'bg-[#089981]/95 border-[#089981] text-white shadow-emerald-950/40' 
+              : 'bg-[#f23645]/95 border-[#f23645] text-white shadow-rose-950/40'
           }`}
         >
-          {/* Order Side Tag (BUY / SELL) */}
-          <span className="bg-black/40 px-1.5 py-0.2 rounded-full font-bold text-[10px] tracking-wide">
-            {isLong ? 'BUY' : 'SELL'}
+          {/* Side & Product Tag */}
+          <span className="font-bold tracking-tight">
+            {isLong ? 'BUY' : 'SELL'} [{productType.slice(0, 3)}] {positionQty}
           </span>
 
-          {/* Product Type (Intraday / Delivery / MTF) */}
-          <span className="bg-white/20 px-1.5 py-0.2 rounded-full font-bold text-[10px] uppercase">
-            {productType}
+          {/* Realtime P&L */}
+          <span className="font-bold border-l border-white/30 pl-1">
+            {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)}
           </span>
 
-          {/* Quantity */}
-          <span className="font-bold">{positionQty} Qty</span>
-
-          {/* Margin Used Capsule (Rounded) */}
-          <span className="bg-black/35 px-2 py-0.2 rounded-full text-[10px] text-amber-300 font-bold border border-amber-400/20" title={`Margin Used: ₹${marginUsed.toFixed(2)}`}>
-            Margin: {formatCurrencyCompact(marginUsed)}
-          </span>
-
-          {/* Live P&L */}
-          <div className="border-l border-white/30 pl-1.5 font-bold">
-            <span>P&L: </span>
-            <span>
-              {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)} ({isPosPnL ? '+' : ''}{(((stockPrice - positionAvgPrice) / positionAvgPrice) * 100).toFixed(2)}%)
-            </span>
-          </div>
-
-          {/* Instant 1-Click Exit Button */}
+          {/* Quick Exit 1-Click Button */}
           <button
             onClick={() => closePosition(stockSymbol, currentStockPosition.product)}
-            title="Square Off Position (Exit Trade)"
-            className="ml-1 p-0.5 rounded-full bg-black/40 hover:bg-black/80 text-white transition-all cursor-pointer flex items-center justify-center active:scale-90"
+            title="Exit Position"
+            className="ml-0.5 p-0.5 rounded-full bg-black/30 hover:bg-black/70 text-white transition cursor-pointer flex items-center justify-center active:scale-90"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-2.5 h-2.5" />
           </button>
         </div>
       )}
