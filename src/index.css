@@ -25,3 +25,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #9aa0a6;
 }
+
+/* Hide scrollbar for slideable elements */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
