@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import * as LightweightCharts from 'lightweight-charts';
+import { createChart } from 'lightweight-charts';
 import { GripVertical } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
@@ -107,14 +107,11 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const width = chartContainerRef.current.clientWidth || 700;
     const height = chartContainerRef.current.clientHeight || 450;
 
-    const chart = LightweightCharts.createChart(chartContainerRef.current, {
+    const chart = createChart(chartContainerRef.current, {
       width,
       height,
       layout: {
-        background: { 
-          type: LightweightCharts.ColorType ? LightweightCharts.ColorType.Solid : 'solid',
-          color: bgColor 
-        },
+        background: { color: bgColor },
         textColor: textColor,
       },
       grid: {
@@ -153,9 +150,8 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       },
     });
 
-    // Universal Series Creation (Handles both v4 and v5 seamlessly)
-    let candleSeries;
-    const candleOptions = {
+    // Pure safe creation using chart methods
+    const candleSeries = chart.addCandlestickSeries({
       upColor: '#089981',
       downColor: '#f23645',
       borderVisible: true,
@@ -167,26 +163,13 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       priceLineColor: '#f23645',
       priceLineWidth: 1,
       priceLineStyle: 2,
-    };
+    });
 
-    if (typeof chart.addCandlestickSeries === 'function') {
-      candleSeries = chart.addCandlestickSeries(candleOptions);
-    } else if (typeof chart.addSeries === 'function' && LightweightCharts.CandlestickSeries) {
-      candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, candleOptions);
-    }
-
-    let volumeSeries;
-    const volumeOptions = {
+    const volumeSeries = chart.addHistogramSeries({
       color: '#089981',
       priceFormat: { type: 'volume' },
       priceScaleId: '',
-    };
-
-    if (typeof chart.addHistogramSeries === 'function') {
-      volumeSeries = chart.addHistogramSeries(volumeOptions);
-    } else if (typeof chart.addSeries === 'function' && LightweightCharts.HistogramSeries) {
-      volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, volumeOptions);
-    }
+    });
 
     if (volumeSeries && typeof volumeSeries.priceScale === 'function') {
       volumeSeries.priceScale().applyOptions({
@@ -194,20 +177,29 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       });
     }
 
-    let ema9, ema21, ema50;
-    const opt9 = { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true };
-    const opt21 = { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true };
-    const opt50 = { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true };
+    const ema9 = chart.addLineSeries({
+      color: '#2962ff',
+      lineWidth: 1.5,
+      title: 'EMA 9',
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
 
-    if (typeof chart.addLineSeries === 'function') {
-      ema9 = chart.addLineSeries(opt9);
-      ema21 = chart.addLineSeries(opt21);
-      ema50 = chart.addLineSeries(opt50);
-    } else if (typeof chart.addSeries === 'function' && LightweightCharts.LineSeries) {
-      ema9 = chart.addSeries(LightweightCharts.LineSeries, opt9);
-      ema21 = chart.addSeries(LightweightCharts.LineSeries, opt21);
-      ema50 = chart.addSeries(LightweightCharts.LineSeries, opt50);
-    }
+    const ema21 = chart.addLineSeries({
+      color: '#f5b041',
+      lineWidth: 1.5,
+      title: 'EMA 21',
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+
+    const ema50 = chart.addLineSeries({
+      color: '#e74c3c',
+      lineWidth: 1.5,
+      title: 'EMA 50',
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
 
     let currentWalkPrice = stockPrice;
     const generatedReversed = [];
@@ -251,14 +243,14 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       });
     });
 
-    if (candleSeries) candleSeries.setData(formattedData);
-    if (volumeSeries) volumeSeries.setData(volumeData);
-    if (ema9) ema9.setData(calculateAccurateEMA(formattedData, 9));
-    if (ema21) ema21.setData(calculateAccurateEMA(formattedData, 21));
-    if (ema50) ema50.setData(calculateAccurateEMA(formattedData, 50));
+    candleSeries.setData(formattedData);
+    volumeSeries.setData(volumeData);
+    ema9.setData(calculateAccurateEMA(formattedData, 9));
+    ema21.setData(calculateAccurateEMA(formattedData, 21));
+    ema50.setData(calculateAccurateEMA(formattedData, 50));
 
     chart.subscribeCrosshairMove((param) => {
-      if (param.time && param.seriesData && candleSeries) {
+      if (param && param.time && param.seriesData && candleSeries) {
         const data = param.seriesData.get(candleSeries);
         if (data) setOhlc(data);
       } else if (lastCandle) {
