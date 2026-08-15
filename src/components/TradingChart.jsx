@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as LightweightCharts from 'lightweight-charts';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, X } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
 function parseNum(val, fallback = 0) {
@@ -52,6 +52,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const ema21SeriesRef = useRef(null);
   const ema50SeriesRef = useRef(null);
   const currentCandleRef = useRef(null);
+  const positionLineRef = useRef(null);
 
   const [showEMA9, setShowEMA9] = useState(true);
   const [showEMA21, setShowEMA21] = useState(true);
@@ -64,12 +65,19 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
 
   const store = useTradingStore();
-  const { theme, updateStockPrice } = store;
+  const { theme, updateStockPrice, positions = [], closePosition } = store;
   const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
   const stockName = activeStock?.name || stockSymbol;
   const stockPrice = parseNum(activeStock?.price, 1045.60);
   const stockChange = parseNum(activeStock?.change, 16.80);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
+
+  // Active Position for Current Stock
+  const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty > 0);
+  const positionAvgPrice = currentStockPosition?.avgPrice || 0;
+  const positionQty = currentStockPosition?.qty || 0;
+  const positionPnL = currentStockPosition ? (stockPrice - positionAvgPrice) * positionQty : 0;
+  const isPosPnL = positionPnL >= 0;
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
   const isDark = theme === 'dark' || theme === 'midnight';
@@ -287,7 +295,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
-    // Real-Time Ticks & Global Store Sync
+    // Real-Time Live Ticks
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
       const delta = (Math.random() - 0.48) * 0.9;
@@ -305,7 +313,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       candleSeriesRef.current.update(tickCandle);
       setOhlc(tickCandle);
 
-      // Push real-time price to global store so Position Table and P&L update live
       if (typeof updateStockPrice === 'function') {
         updateStockPrice(stockSymbol, newClose);
       }
@@ -333,6 +340,28 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockSymbol, timeframe, theme]);
+
+  // Sync Chart Dynamic Price Line with Buy Position
+  useEffect(() => {
+    if (!candleSeriesRef.current) return;
+
+    if (positionLineRef.current) {
+      candleSeriesRef.current.removePriceLine(positionLineRef.current);
+      positionLineRef.current = null;
+    }
+
+    if (currentStockPosition && positionAvgPrice > 0) {
+      const lineColor = isPosPnL ? '#089981' : '#f23645';
+      positionLineRef.current = candleSeriesRef.current.createPriceLine({
+        price: positionAvgPrice,
+        color: lineColor,
+        lineWidth: 2,
+        lineStyle: 0, // Solid
+        axisLabelVisible: true,
+        title: `BUY ${positionQty} @ ₹${positionAvgPrice.toFixed(2)}`,
+      });
+    }
+  }, [currentStockPosition, positionAvgPrice, positionQty, isPosPnL]);
 
   useEffect(() => {
     if (ema9SeriesRef.current) ema9SeriesRef.current.applyOptions({ visible: showEMA9 });
@@ -394,6 +423,38 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           </span>
         </div>
       </div>
+
+      {/* ON-CHART LIVE POSITION PILL & SQUARE-OFF BUTTON */}
+      {currentStockPosition && (
+        <div
+          className={`absolute top-12 left-3 z-30 flex items-center gap-2 px-2.5 py-1 rounded-md shadow-xl border text-xs font-mono backdrop-blur-md transition-all ${
+            isPosPnL 
+              ? 'bg-[#089981]/20 border-[#089981]/60 text-emerald-300' 
+              : 'bg-[#f23645]/20 border-[#f23645]/60 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-1 font-bold">
+            <span className="bg-blue-600 text-white px-1 rounded text-[10px]">BUY</span>
+            <span>{positionQty} Qty @ ₹{positionAvgPrice.toFixed(2)}</span>
+          </div>
+
+          <div className="border-l border-slate-600/60 pl-2 flex items-center gap-1 font-bold">
+            <span>P&L:</span>
+            <span className={isPosPnL ? 'text-[#089981]' : 'text-[#f23645]'}>
+              {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)} ({isPosPnL ? '+' : ''}{(((stockPrice - positionAvgPrice) / positionAvgPrice) * 100).toFixed(2)}%)
+            </span>
+          </div>
+
+          {/* Direct 1-Click Close Position ('X') on Chart */}
+          <button
+            onClick={() => closePosition(stockSymbol, currentStockPosition.product)}
+            title="Square Off Position Immediately"
+            className="ml-1 p-0.5 rounded bg-rose-500/30 hover:bg-rose-500 text-white transition cursor-pointer flex items-center justify-center"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* DRAGGABLE EMA WIDGET */}
       <div

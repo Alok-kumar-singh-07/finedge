@@ -18,10 +18,10 @@ export const useTradingStore = create((set, get) => ({
   selectedStock: INITIAL_STOCKS[7], // Tata Motors
   positions: [],
   orders: [],
+  realizedPnLList: [], // Closed trades PnL history
 
   setSelectedStock: (stock) => set({ selectedStock: stock }),
 
-  // Real-time price sync between Chart, Watchlist & Positions Table
   updateStockPrice: (symbol, newPrice) => {
     const parsedPrice = parseFloat(newPrice);
     if (isNaN(parsedPrice)) return;
@@ -58,7 +58,7 @@ export const useTradingStore = create((set, get) => ({
     const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     if (type === 'BUY' && currentCash < requiredMargin) {
-      alert(`Insufficient Funds! Required Margin: ₹${requiredMargin.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, Available: ₹${currentCash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+      alert(`Insufficient Funds! Required: ₹${requiredMargin.toLocaleString('en-IN')}, Available: ₹${currentCash.toLocaleString('en-IN')}`);
       return;
     }
 
@@ -75,6 +75,7 @@ export const useTradingStore = create((set, get) => ({
 
     let updatedPositions = [...get().positions];
     const posIndex = updatedPositions.findIndex((p) => p.symbol === symbol && p.product === product);
+    const closedPnLEntries = [];
 
     if (type === 'BUY') {
       if (posIndex > -1) {
@@ -103,11 +104,26 @@ export const useTradingStore = create((set, get) => ({
         positions: updatedPositions,
       }));
     } else {
+      // SELL / SQUARE OFF
       if (posIndex > -1) {
         const exist = updatedPositions[posIndex];
+        const closeQty = Math.min(exist.qty, numQty);
+        const pnl = (numPrice - exist.avgPrice) * closeQty;
+        const releasedMargin = (exist.marginBlocked / exist.qty) * closeQty;
+
+        closedPnLEntries.push({
+          id: Date.now().toString(),
+          time,
+          symbol,
+          product,
+          qty: closeQty,
+          buyPrice: exist.avgPrice,
+          sellPrice: numPrice,
+          pnl: parseFloat(pnl.toFixed(2)),
+          pnlPercent: parseFloat((((numPrice - exist.avgPrice) / exist.avgPrice) * 100).toFixed(2)),
+        });
+
         if (exist.qty > numQty) {
-          const releasedMargin = (exist.marginBlocked / exist.qty) * numQty;
-          const pnl = (numPrice - exist.avgPrice) * numQty;
           updatedPositions[posIndex] = {
             ...exist,
             qty: exist.qty - numQty,
@@ -117,18 +133,19 @@ export const useTradingStore = create((set, get) => ({
             cash: state.cash + releasedMargin + pnl,
             orders: [newOrder, ...state.orders],
             positions: updatedPositions,
+            realizedPnLList: [...closedPnLEntries, ...state.realizedPnLList],
           }));
         } else {
-          const pnl = (numPrice - exist.avgPrice) * exist.qty;
-          const returnFunds = exist.marginBlocked + pnl;
           updatedPositions.splice(posIndex, 1);
           set((state) => ({
-            cash: state.cash + returnFunds,
+            cash: state.cash + exist.marginBlocked + pnl,
             orders: [newOrder, ...state.orders],
             positions: updatedPositions,
+            realizedPnLList: [...closedPnLEntries, ...state.realizedPnLList],
           }));
         }
       } else {
+        // Intraday Short Sell
         updatedPositions.push({
           id: Date.now().toString(),
           symbol,

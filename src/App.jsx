@@ -14,6 +14,7 @@ export default function App() {
     positions = [], 
     orders = [], 
     watchlist = [],
+    realizedPnLList = [],
     closePosition 
   } = store;
 
@@ -31,12 +32,17 @@ export default function App() {
 
   const isDark = theme === 'dark' || theme === 'midnight';
 
-  // Calculate Total PnL across all active positions
-  const totalPnL = positions.reduce((acc, pos) => {
+  // Unrealized P&L across all active open positions
+  const unrealizedPnL = positions.reduce((acc, pos) => {
     const currentStock = watchlist.find((s) => s.symbol === pos.symbol) || selectedStock;
     const ltp = currentStock?.price || pos.avgPrice;
     return acc + (ltp - pos.avgPrice) * pos.qty;
   }, 0);
+
+  // Total Realized Profit / Loss from closed trades
+  const totalRealizedPnL = realizedPnLList.reduce((acc, item) => acc + (item.pnl || 0), 0);
+  const winningTrades = realizedPnLList.filter((item) => item.pnl > 0).length;
+  const losingTrades = realizedPnLList.filter((item) => item.pnl < 0).length;
 
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden select-none font-sans ${isDark ? 'bg-[#0B0E14] text-slate-200' : 'bg-white text-slate-800'}`}>
@@ -70,7 +76,7 @@ export default function App() {
           <Watchlist onMinimize={() => setIsWatchlistOpen(false)} />
         </div>
 
-        {/* Re-open Floating Arrow Tab (Shifted Down to top-14 to avoid Sell Button overlap) */}
+        {/* Re-open Floating Arrow Tab */}
         {!isWatchlistOpen && (
           <button
             onClick={() => setIsWatchlistOpen(true)}
@@ -93,7 +99,7 @@ export default function App() {
             />
           </div>
 
-          {/* Bottom Panel (Positions / Orders / Depth) */}
+          {/* Bottom Panel (Positions / Orders / P&L History / Depth) */}
           <div className={`border-t border-[#1E293B] bg-[#0E131F] transition-all duration-200 flex flex-col ${isBottomOpen ? 'h-60' : 'h-8'}`}>
             <div className="h-8 px-3 flex items-center justify-between bg-[#111726] border-b border-[#1E293B] text-xs font-semibold text-slate-400">
               <div className="flex items-center gap-4">
@@ -112,6 +118,13 @@ export default function App() {
                   <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[10px]">{orders.length}</span>
                 </button>
                 <button 
+                  onClick={() => { setActiveBottomTab('pnl'); setIsBottomOpen(true); }}
+                  className={`flex items-center gap-1.5 hover:text-white transition ${activeBottomTab === 'pnl' && isBottomOpen ? 'text-[#26a69a] border-b-2 border-[#26a69a] h-8' : ''}`}
+                >
+                  <span>💰 Realized P&L</span>
+                  <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[10px]">{realizedPnLList.length}</span>
+                </button>
+                <button 
                   onClick={() => { setActiveBottomTab('depth'); setIsBottomOpen(true); }}
                   className={`hover:text-white hidden sm:block ${activeBottomTab === 'depth' && isBottomOpen ? 'text-[#26a69a] border-b-2 border-[#26a69a] h-8' : ''}`}
                 >
@@ -120,9 +133,13 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-3">
-                {positions.length > 0 && (
-                  <span className={`text-[11px] font-mono font-bold ${totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    Total P&L: {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toFixed(2)}
+                {positions.length > 0 ? (
+                  <span className={`text-[11px] font-mono font-bold ${unrealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    Open P&L: {unrealizedPnL >= 0 ? '+' : ''}₹{unrealizedPnL.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className={`text-[11px] font-mono font-bold ${totalRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    Realized P&L: {totalRealizedPnL >= 0 ? '+' : ''}₹{totalRealizedPnL.toFixed(2)}
                   </span>
                 )}
                 <button 
@@ -137,6 +154,7 @@ export default function App() {
             {/* Bottom Dock Content */}
             {isBottomOpen && (
               <div className="flex-1 overflow-auto p-2 bg-[#0b0e14]">
+                {/* 1. OPEN POSITIONS TAB */}
                 {activeBottomTab === 'positions' && (
                   <div className="text-xs text-slate-400">
                     {positions.length > 0 ? (
@@ -190,6 +208,65 @@ export default function App() {
                   </div>
                 )}
 
+                {/* 2. REALIZED P&L / CLOSED TRADES STATEMENT TAB */}
+                {activeBottomTab === 'pnl' && (
+                  <div className="text-xs text-slate-400">
+                    <div className="flex items-center gap-4 mb-3 bg-[#111726] p-2.5 rounded-lg border border-slate-800">
+                      <div>
+                        <span className="text-slate-500 text-[10px] block">TOTAL NET REALIZED P&L</span>
+                        <span className={`text-sm font-bold font-mono ${totalRealizedPnL >= 0 ? 'text-[#089981]' : 'text-[#f23645]'}`}>
+                          {totalRealizedPnL >= 0 ? '+' : ''}₹{totalRealizedPnL.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="border-l border-slate-800 pl-3">
+                        <span className="text-slate-500 text-[10px] block">PROFITABLE TRADES</span>
+                        <span className="text-xs font-bold text-[#089981]">{winningTrades} Wins</span>
+                      </div>
+                      <div className="border-l border-slate-800 pl-3">
+                        <span className="text-slate-500 text-[10px] block">LOSING TRADES</span>
+                        <span className="text-xs font-bold text-[#f23645]">{losingTrades} Losses</span>
+                      </div>
+                    </div>
+
+                    {realizedPnLList.length > 0 ? (
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-500">
+                            <th className="p-2">Time</th>
+                            <th className="p-2">Symbol</th>
+                            <th className="p-2">Product</th>
+                            <th className="p-2">Qty</th>
+                            <th className="p-2">Buy Price</th>
+                            <th className="p-2">Sell Price</th>
+                            <th className="p-2 text-right">Realized P&L</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {realizedPnLList.map((item, idx) => {
+                            const isWin = item.pnl >= 0;
+                            return (
+                              <tr key={idx} className="border-b border-slate-900 hover:bg-slate-900/50">
+                                <td className="p-2 font-mono text-slate-400">{item.time}</td>
+                                <td className="p-2 font-bold text-white">{item.symbol}</td>
+                                <td className="p-2 text-blue-400 font-semibold">{item.product}</td>
+                                <td className="p-2 font-mono">{item.qty}</td>
+                                <td className="p-2 font-mono">₹{item.buyPrice.toFixed(2)}</td>
+                                <td className="p-2 font-mono">₹{item.sellPrice.toFixed(2)}</td>
+                                <td className={`p-2 font-mono font-bold text-right ${isWin ? 'text-[#089981]' : 'text-[#f23645]'}`}>
+                                  {isWin ? '+' : ''}₹{item.pnl.toFixed(2)} ({isWin ? '+' : ''}{item.pnlPercent}%)
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="text-center py-6 text-slate-500">No closed trades yet. Square off a position to see realized earnings.</div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. ORDER HISTORY TAB */}
                 {activeBottomTab === 'orders' && (
                   <div className="text-xs text-slate-400">
                     {orders.length > 0 ? (
@@ -223,6 +300,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* 4. MARKET DEPTH TAB */}
                 {activeBottomTab === 'depth' && (
                   <div className="text-xs text-slate-400 p-3 grid grid-cols-2 gap-4">
                     <div>
