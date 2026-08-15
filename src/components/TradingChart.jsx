@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as LightweightCharts from 'lightweight-charts';
-import { GripVertical, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
 function parseNum(val, fallback = 0) {
@@ -43,13 +43,12 @@ function formatDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-// Pure helper function outside component scope
 function generateCandleData(stockPrice, timeframe) {
   let currentWalkPrice = stockPrice;
   const generatedReversed = [];
   const volumeData = [];
   const now = new Date();
-  const totalBars = timeframe === '1M' ? 120 : timeframe === '1W' ? 200 : 250;
+  const totalBars = timeframe === '1M' ? 100 : timeframe === '1W' ? 150 : 200;
 
   for (let i = 0; i < totalBars; i++) {
     let time;
@@ -83,7 +82,7 @@ function generateCandleData(stockPrice, timeframe) {
   formattedData.forEach((bar) => {
     volumeData.push({
       time: bar.time,
-      value: Math.floor(Math.random() * 600000) + 100000,
+      value: Math.floor(Math.random() * 500000) + 100000,
       color: bar.close >= bar.open ? '#08998144' : '#f2364544',
     });
   });
@@ -91,7 +90,7 @@ function generateCandleData(stockPrice, timeframe) {
   return { formattedData, volumeData };
 }
 
-export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrder }) {
+export default function TradingChart({ activeStock, timeframe = '1D' }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
@@ -106,18 +105,13 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const [showEMA21, setShowEMA21] = useState(true);
   const [showEMA50, setShowEMA50] = useState(true);
 
-  const [emaPos, setEmaPos] = useState({ x: 0, y: 10 });
-  const isDraggingWidget = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
-
-  const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
   const [pillTop, setPillTop] = useState(null);
 
   const store = useTradingStore();
   const { theme, updateStockPrice, positions = [], closePosition } = store;
   const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 1042.26);
+  const stockPrice = parseNum(activeStock?.price, 1048.37);
   const stockChange = parseNum(activeStock?.change, 16.80);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
@@ -155,39 +149,12 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     }
   };
 
-  const handleWidgetMouseDown = (e) => {
-    isDraggingWidget.current = true;
-    dragOffset.current = {
-      x: e.clientX - emaPos.x,
-      y: e.clientY - emaPos.y,
-    };
-  };
-
-  useEffect(() => {
-    const handleWidgetMouseMove = (e) => {
-      if (!isDraggingWidget.current) return;
-      setEmaPos({
-        x: e.clientX - dragOffset.current.x,
-        y: e.clientY - dragOffset.current.y,
-      });
-    };
-    const handleWidgetMouseUp = () => {
-      isDraggingWidget.current = false;
-    };
-    window.addEventListener('mousemove', handleWidgetMouseMove);
-    window.addEventListener('mouseup', handleWidgetMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleWidgetMouseMove);
-      window.removeEventListener('mouseup', handleWidgetMouseUp);
-    };
-  }, [emaPos]);
-
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     chartContainerRef.current.innerHTML = '';
 
-    const width = chartContainerRef.current.clientWidth || 700;
+    const width = chartContainerRef.current.clientWidth || 360;
     const height = chartContainerRef.current.clientHeight || 450;
 
     let chartInstance;
@@ -207,7 +174,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         rightPriceScale: {
           borderColor: borderColor,
           autoScale: true,
-          scaleMargins: { top: 0.08, bottom: 0.2 },
+          scaleMargins: { top: 0.12, bottom: 0.2 },
           alignLabels: true,
         },
         timeScale: {
@@ -216,7 +183,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           secondsVisible: false,
           barSpacing: timeframe === '1M' ? 14 : timeframe === '1W' ? 10 : 8,
           minBarSpacing: 2,
-          rightOffset: 25,
+          rightOffset: 15,
           fixLeftEdge: false,
           fixRightEdge: false,
         },
@@ -287,24 +254,17 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
 
     if (volumeSeries && typeof volumeSeries.priceScale === 'function') {
       volumeSeries.priceScale().applyOptions({
-        scaleMargins: { top: 0.82, bottom: 0 },
+        scaleMargins: { top: 0.84, bottom: 0 },
       });
     }
 
-    const ema9 = addSeriesHelper('Line', { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true });
-    const ema21 = addSeriesHelper('Line', { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true });
-    const ema50 = addSeriesHelper('Line', { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true });
+    const ema9 = addSeriesHelper('Line', { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: false });
+    const ema21 = addSeriesHelper('Line', { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: false });
+    const ema50 = addSeriesHelper('Line', { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: false });
 
-    // Generate historical candles cleanly via pure helper
     const { formattedData, volumeData } = generateCandleData(stockPrice, timeframe);
     const lastCandle = formattedData[formattedData.length - 1];
     currentCandleRef.current = lastCandle;
-
-    if (lastCandle) {
-      requestAnimationFrame(() => {
-        setOhlc(lastCandle);
-      });
-    }
 
     if (candleSeries) candleSeries.setData(formattedData);
     if (volumeSeries) volumeSeries.setData(volumeData);
@@ -312,13 +272,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     if (ema21) ema21.setData(calculateAccurateEMA(formattedData, 21));
     if (ema50) ema50.setData(calculateAccurateEMA(formattedData, 50));
 
-    chartInstance.subscribeCrosshairMove((param) => {
-      if (param && param.time && param.seriesData && candleSeries) {
-        const data = param.seriesData.get(candleSeries);
-        if (data) setOhlc(data);
-      } else if (currentCandleRef.current) {
-        setOhlc(currentCandleRef.current);
-      }
+    chartInstance.subscribeCrosshairMove(() => {
       syncPillYCoordinate();
     });
 
@@ -350,7 +304,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       };
       currentCandleRef.current = tickCandle;
       candleSeriesRef.current.update(tickCandle);
-      setOhlc(tickCandle);
 
       if (typeof updateStockPrice === 'function') {
         updateStockPrice(stockSymbol, newClose);
@@ -421,78 +374,66 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       style={{ backgroundColor: bgColor }}
       className="w-full h-full relative overflow-hidden select-none"
     >
-      {/* Top Fixed Buy/Sell Order Pill */}
-      <div className="absolute top-2 left-3 z-30 flex items-center gap-1 shadow-md font-sans">
-        <button
-          onClick={() => onOpenOrder && onOpenOrder('SELL')}
-          className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-2.5 py-1 rounded-l text-[11px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
-        >
-          <span>{stockPrice.toFixed(2)}</span>
-          <span className="text-[8px] font-normal opacity-90">SELL</span>
-        </button>
-
-        <div
-          style={{
-            backgroundColor: isDark ? '#151922' : '#f0f3fa',
-            borderColor: borderColor,
-            color: isDark ? '#ffffff' : '#131722',
-          }}
-          className="px-2 py-1 text-[11px] font-bold border-y flex items-center justify-center font-mono"
-        >
-          0.00
-        </div>
-
-        <button
-          onClick={() => onOpenOrder && onOpenOrder('BUY')}
-          className="bg-[#2962ff] hover:bg-[#1e53e5] text-white px-2.5 py-1 rounded-r text-[11px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
-        >
-          <span>{stockPrice.toFixed(2)}</span>
-          <span className="text-[8px] font-normal opacity-90">BUY</span>
-        </button>
-      </div>
-
-      {/* Top Legend Bar */}
-      <div className="absolute top-2.5 left-52 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
-        <div className="flex items-center gap-1 font-bold">
-          <span className={isDark ? 'text-white' : 'text-[#131722]'}>{stockName}</span>
-          <span className="text-gray-400">• {timeframe} • NSE</span>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] font-mono">
-          <span className="text-gray-500">O<span className="text-gray-400 ml-0.5">{parseNum(ohlc.open).toFixed(2)}</span></span>
-          <span className="text-gray-500">H<span className="text-gray-400 ml-0.5">{parseNum(ohlc.high).toFixed(2)}</span></span>
-          <span className="text-gray-500">L<span className="text-gray-400 ml-0.5">{parseNum(ohlc.low).toFixed(2)}</span></span>
-          <span className="text-gray-500">C<span className="text-gray-400 ml-0.5">{parseNum(ohlc.close).toFixed(2)}</span></span>
-          <span className={`font-bold ml-1 ${isPos ? 'text-[#089981]' : 'text-[#f23645]'}`}>
-            {isPos ? '+' : ''}{stockChange.toFixed(2)} ({isPos ? '+' : ''}{stockPercent.toFixed(2)}%)
+      {/* Top Header Bar */}
+      <div className="absolute top-1.5 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-1.5 font-sans text-[11px] sm:text-xs">
+          <span className={`font-bold ${isDark ? 'text-white' : 'text-[#131722]'}`}>{stockName}</span>
+          <span className="text-gray-400">• {timeframe}</span>
+          <span className={`font-bold font-mono text-[10px] sm:text-[11px] ${isPos ? 'text-[#089981]' : 'text-[#f23645]'}`}>
+            ₹{stockPrice.toFixed(2)} ({isPos ? '+' : ''}{stockPercent.toFixed(2)}%)
           </span>
         </div>
+
+        {/* EMA Control Pills */}
+        <div className="flex items-center gap-1 pointer-events-auto text-[9px] font-mono">
+          <button
+            onClick={() => setShowEMA9(!showEMA9)}
+            className={`px-1.5 py-0.2 rounded transition cursor-pointer font-bold ${
+              showEMA9 ? 'bg-[#2962ff] text-white' : 'bg-slate-800/80 text-gray-500 line-through'
+            }`}
+          >
+            9
+          </button>
+          <button
+            onClick={() => setShowEMA21(!showEMA21)}
+            className={`px-1.5 py-0.2 rounded transition cursor-pointer font-bold ${
+              showEMA21 ? 'bg-[#f5b041] text-black' : 'bg-slate-800/80 text-gray-500 line-through'
+            }`}
+          >
+            21
+          </button>
+          <button
+            onClick={() => setShowEMA50(!showEMA50)}
+            className={`px-1.5 py-0.2 rounded transition cursor-pointer font-bold ${
+              showEMA50 ? 'bg-[#e74c3c] text-white' : 'bg-slate-800/80 text-gray-500 line-through'
+            }`}
+          >
+            50
+          </button>
+        </div>
       </div>
 
-      {/* ULTRA-COMPACT SLEEK ON-CHART POSITION PILL */}
+      {/* ULTRA-COMPACT ON-CHART POSITION PILL */}
       {currentStockPosition && pillTop !== null && pillTop > 0 && (
         <div
           style={{
             top: `${pillTop - 11}px`,
-            right: '90px',
+            right: '75px',
           }}
           className={`absolute z-30 flex items-center gap-1.5 px-2 py-0.5 rounded-full shadow-lg border text-[10px] font-mono backdrop-blur-md transition-all duration-75 ${
             isPosPnL 
-              ? 'bg-[#089981]/95 border-[#089981] text-white shadow-emerald-950/40' 
-              : 'bg-[#f23645]/95 border-[#f23645] text-white shadow-rose-950/40'
+              ? 'bg-[#089981]/95 border-[#089981] text-white' 
+              : 'bg-[#f23645]/95 border-[#f23645] text-white'
           }`}
         >
-          {/* Side & Product Tag */}
           <span className="font-bold tracking-tight">
             {isLong ? 'BUY' : 'SELL'} [{productType.slice(0, 3)}] {positionQty}
           </span>
 
-          {/* Realtime P&L */}
           <span className="font-bold border-l border-white/30 pl-1">
             {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)}
           </span>
 
-          {/* Quick Exit 1-Click Button */}
           <button
             onClick={() => closePosition(stockSymbol, currentStockPosition.product)}
             title="Exit Position"
@@ -502,45 +443,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           </button>
         </div>
       )}
-
-      {/* DRAGGABLE EMA WIDGET */}
-      <div
-        style={{
-          transform: `translate(${emaPos.x}px, ${emaPos.y}px)`,
-          right: '85px',
-          backgroundColor: isDark ? '#151922' : '#ffffff',
-          borderColor: borderColor,
-        }}
-        className="absolute top-2 z-30 flex items-center gap-1 border px-2 py-0.5 rounded shadow-md text-[10px] font-mono cursor-move"
-      >
-        <div onMouseDown={handleWidgetMouseDown} className="text-gray-400 hover:text-white cursor-grab pr-0.5">
-          <GripVertical className="w-3 h-3" />
-        </div>
-        <button
-          onClick={() => setShowEMA9(!showEMA9)}
-          className={`px-1.5 py-0.5 rounded cursor-pointer font-bold transition-all ${
-            showEMA9 ? 'bg-[#2962ff] text-white' : 'bg-transparent text-gray-500 line-through'
-          }`}
-        >
-          EMA 9
-        </button>
-        <button
-          onClick={() => setShowEMA21(!showEMA21)}
-          className={`px-1.5 py-0.5 rounded cursor-pointer font-bold transition-all ${
-            showEMA21 ? 'bg-[#f5b041] text-black' : 'bg-transparent text-gray-500 line-through'
-          }`}
-        >
-          EMA 21
-        </button>
-        <button
-          onClick={() => setShowEMA50(!showEMA50)}
-          className={`px-1.5 py-0.5 rounded cursor-pointer font-bold transition-all ${
-            showEMA50 ? 'bg-[#e74c3c] text-white' : 'bg-transparent text-gray-500 line-through'
-          }`}
-        >
-          EMA 50
-        </button>
-      </div>
 
       {/* Chart Canvas */}
       <div className="w-full h-full cursor-crosshair" ref={chartContainerRef} />
