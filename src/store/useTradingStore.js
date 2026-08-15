@@ -15,7 +15,7 @@ export const useTradingStore = create((set, get) => ({
   theme: 'dark',
   cash: 1000000.00, // ₹10,00,000 standard virtual capital
   watchlist: INITIAL_STOCKS,
-  selectedStock: INITIAL_STOCKS[2], // Default HDFC Bank
+  selectedStock: INITIAL_STOCKS[7], // Default Tata Motors
   positions: [],
   orders: [],
 
@@ -24,17 +24,21 @@ export const useTradingStore = create((set, get) => ({
   executeOrder: ({ type, symbol, qty, price, product = 'INTRADAY' }) => {
     const numQty = Math.max(1, parseInt(qty, 10) || 1);
     const numPrice = parseFloat(price) || get().selectedStock?.price || 1000;
-    const orderCost = numQty * numPrice;
+    
+    // Leverage Multiplier
+    const leverage = product === 'INTRADAY' ? 5 : product === 'MTF' ? 4 : 1;
+    const totalTradeValue = numQty * numPrice;
+    const requiredMargin = totalTradeValue / leverage;
     const currentCash = get().cash;
     const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Validate Fund for BUY
-    if (type === 'BUY' && currentCash < orderCost) {
-      alert(`Insufficient Funds! Required: ₹${orderCost.toLocaleString('en-IN')}, Available: ₹${currentCash.toLocaleString('en-IN')}`);
+    // Validate Actual Required Margin against available cash
+    if (type === 'BUY' && currentCash < requiredMargin) {
+      alert(`Insufficient Funds! Required Margin: ₹${requiredMargin.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, Available: ₹${currentCash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
       return;
     }
 
-    // 1. Order Log Record
+    // 1. Log Order Record
     const newOrder = {
       id: Date.now().toString(),
       time,
@@ -46,19 +50,20 @@ export const useTradingStore = create((set, get) => ({
       status: 'EXECUTED',
     };
 
-    // 2. Position Handling
+    // 2. Manage Position
     let updatedPositions = [...get().positions];
     const posIndex = updatedPositions.findIndex((p) => p.symbol === symbol && p.product === product);
 
     if (type === 'BUY') {
       if (posIndex > -1) {
         const exist = updatedPositions[posIndex];
-        const totalCost = (exist.avgPrice * exist.qty) + orderCost;
+        const combinedValue = (exist.avgPrice * exist.qty) + totalTradeValue;
         const totalQty = exist.qty + numQty;
         updatedPositions[posIndex] = {
           ...exist,
           qty: totalQty,
-          avgPrice: parseFloat((totalCost / totalQty).toFixed(2)),
+          avgPrice: parseFloat((combinedValue / totalQty).toFixed(2)),
+          marginBlocked: (exist.marginBlocked || 0) + requiredMargin,
         };
       } else {
         updatedPositions.push({
@@ -67,33 +72,38 @@ export const useTradingStore = create((set, get) => ({
           product,
           qty: numQty,
           avgPrice: numPrice,
+          marginBlocked: requiredMargin,
         });
       }
       set((state) => ({
-        cash: state.cash - orderCost,
+        cash: state.cash - requiredMargin,
         orders: [newOrder, ...state.orders],
         positions: updatedPositions,
       }));
     } else {
-      // SELL Handling
+      // SELL Execution / Square Off
       if (posIndex > -1) {
         const exist = updatedPositions[posIndex];
         if (exist.qty > numQty) {
+          const releasedMargin = (exist.marginBlocked / exist.qty) * numQty;
+          const pnl = (numPrice - exist.avgPrice) * numQty;
           updatedPositions[posIndex] = {
             ...exist,
             qty: exist.qty - numQty,
+            marginBlocked: exist.marginBlocked - releasedMargin,
           };
           set((state) => ({
-            cash: state.cash + orderCost,
+            cash: state.cash + releasedMargin + pnl,
             orders: [newOrder, ...state.orders],
             positions: updatedPositions,
           }));
         } else {
-          // Closed completely
-          const actualSoldCost = exist.qty * numPrice;
+          // Completely close position
+          const pnl = (numPrice - exist.avgPrice) * exist.qty;
+          const returnFunds = exist.marginBlocked + pnl;
           updatedPositions.splice(posIndex, 1);
           set((state) => ({
-            cash: state.cash + actualSoldCost,
+            cash: state.cash + returnFunds,
             orders: [newOrder, ...state.orders],
             positions: updatedPositions,
           }));
@@ -106,8 +116,10 @@ export const useTradingStore = create((set, get) => ({
           product,
           qty: -numQty,
           avgPrice: numPrice,
+          marginBlocked: requiredMargin,
         });
         set((state) => ({
+          cash: state.cash - requiredMargin,
           orders: [newOrder, ...state.orders],
           positions: updatedPositions,
         }));
