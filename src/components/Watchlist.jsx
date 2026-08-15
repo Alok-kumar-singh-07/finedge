@@ -2,51 +2,41 @@ import { useState } from 'react';
 import { Search, TrendingUp, TrendingDown } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
-const DEFAULT_STOCKS = [
-  { id: '1', symbol: 'RELIANCE', name: 'Reliance Industries', price: 2993.75, change: 12.45, changePercent: 0.42 },
-  { id: '2', symbol: 'TCS', name: 'Tata Consultancy Services', price: 4180.50, change: -18.20, changePercent: -0.43 },
-  { id: '3', symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', price: 1640.10, change: 8.90, changePercent: 0.55 },
-  { id: '4', symbol: 'INFY', name: 'Infosys Ltd', price: 1785.00, change: -5.60, changePercent: -0.31 },
-  { id: '5', symbol: 'ICICIBANK', name: 'ICICI Bank Ltd', price: 1190.25, change: 14.30, changePercent: 1.22 },
-  { id: '6', symbol: 'SBIN', name: 'State Bank of India', price: 835.40, change: 3.10, changePercent: 0.37 },
-  { id: '7', symbol: 'BHARTIARTL', name: 'Bharti Airtel Ltd', price: 1420.80, change: -2.40, changePercent: -0.17 },
-  { id: '8', symbol: 'TATAMOTORS', name: 'Tata Motors Ltd', price: 1045.60, change: 16.80, changePercent: 1.63 },
-];
-
 export default function Watchlist() {
   const store = useTradingStore();
-  const rawList = store?.watchlist || store?.stocks || DEFAULT_STOCKS;
-  const watchlist = Array.isArray(rawList) ? rawList : DEFAULT_STOCKS;
-  
-  const selectedStock = store?.selectedStock || watchlist[0] || DEFAULT_STOCKS[0];
-  const setSelectedStock = store?.setSelectedStock || store?.setActiveStock || (() => {});
+  const watchlist = Array.isArray(store?.watchlist) ? store.watchlist : [];
+  const selectedStock = store?.selectedStock || watchlist[0];
+  const setSelectedStock = store?.setSelectedStock || (() => {});
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('All');
 
   const filteredStocks = watchlist.filter((stock) => {
     if (!stock) return false;
-    const nameMatch = (stock.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const symbolMatch = (stock.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return nameMatch || symbolMatch;
+    const matchesSearch = 
+      (stock.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (stock.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (activeTab === 'All') return matchesSearch;
+    return matchesSearch && stock.sector === activeTab;
   });
 
   return (
     <div className="flex flex-col h-full bg-[#0E131F] text-slate-200 border-r border-[#1E293B] select-none text-xs">
-      {/* Top Search Bar */}
+      {/* Search Header */}
       <div className="p-2 border-b border-[#1E293B]">
         <div className="relative flex items-center">
           <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500" />
           <input
             type="text"
-            placeholder="Search stock, index (e.g. RELIANCE, NIFTY)"
+            placeholder="Search stock, index..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-[#151C2C] text-slate-200 pl-8 pr-3 py-1.5 rounded text-xs outline-none border border-transparent focus:border-blue-500 placeholder-slate-500"
           />
         </div>
 
-        {/* Watchlist Tabs */}
+        {/* Dynamic Categorized Filter Tabs */}
         <div className="flex items-center gap-1 mt-2 text-[11px] font-semibold text-slate-400 overflow-x-auto pb-0.5">
           {['All', 'Nifty 50', 'Bank', 'F&O'].map((tab) => (
             <button
@@ -60,7 +50,7 @@ export default function Watchlist() {
             </button>
           ))}
           <span className="ml-auto text-[10px] text-slate-500 px-1 font-mono">
-            {filteredStocks.length} / 50
+            {filteredStocks.length} / {watchlist.length}
           </span>
         </div>
       </div>
@@ -107,7 +97,7 @@ export default function Watchlist() {
           })
         ) : (
           <div className="p-4 text-center text-slate-500 text-xs">
-            No stocks found matching "{searchTerm}"
+            No stocks found in "{activeTab}"
           </div>
         )}
       </div>

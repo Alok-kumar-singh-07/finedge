@@ -64,11 +64,11 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
 
   const { theme } = useTradingStore();
-  const stockSymbol = activeStock?.symbol || 'STOCK';
+  const stockSymbol = activeStock?.symbol || 'HDFCBANK';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 200);
-  const stockChange = parseNum(activeStock?.change, 0);
-  const stockPercent = parseNum(activeStock?.changePercent, 0);
+  const stockPrice = parseNum(activeStock?.price, 1640);
+  const stockChange = parseNum(activeStock?.change, 8.9);
+  const stockPercent = parseNum(activeStock?.changePercent, 0.55);
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
   const isDark = theme === 'dark' || theme === 'midnight';
@@ -136,26 +136,15 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           borderColor: borderColor,
           timeVisible: !isDailyOrAbove,
           secondsVisible: false,
-          barSpacing: timeframe === '1M' ? 20 : timeframe === '1W' ? 14 : 9,
+          barSpacing: timeframe === '1M' ? 14 : timeframe === '1W' ? 10 : 8,
           minBarSpacing: 3,
-          rightOffset: 25,
-          fixLeftEdge: false,
-          fixRightEdge: false,
+          rightOffset: 20,
         },
-        handleScroll: {
-          mouseWheel: true,
-          pressedMouseMove: true,
-          horzTouchDrag: true,
-          vertTouchDrag: true,
-        },
-        handleScale: {
-          axisPressedMouseMove: { time: true, price: true },
-          mouseWheel: true,
-          pinch: true,
-        },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+        handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
       });
     } catch (e) {
-      console.error("Chart initialization failed:", e);
+      console.error("Chart creation error:", e);
       return;
     }
 
@@ -221,7 +210,8 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const generatedReversed = [];
     const volumeData = [];
     const now = new Date();
-    const totalBars = timeframe === '1M' ? 60 : timeframe === '1W' ? 100 : 150;
+    // Warmup buffer ensures EMA50 renders completely
+    const totalBars = timeframe === '1M' ? 120 : timeframe === '1W' ? 200 : 250;
 
     for (let i = 0; i < totalBars; i++) {
       let time;
@@ -259,7 +249,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     formattedData.forEach((bar) => {
       volumeData.push({
         time: bar.time,
-        value: Math.floor(Math.random() * 800000) + 150000,
+        value: Math.floor(Math.random() * 600000) + 100000,
         color: bar.close >= bar.open ? '#08998144' : '#f2364544',
       });
     });
@@ -364,8 +354,8 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </button>
       </div>
 
-      {/* Top Legend Bar (Properly Offset to Avoid Overlap) */}
-      <div className="absolute top-2.5 left-48 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
+      {/* Top Legend Bar (Proper 210px margin to completely avoid overlap) */}
+      <div className="absolute top-2.5 left-52 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
         <div className="flex items-center gap-1 font-bold">
           <span className={isDark ? 'text-white' : 'text-[#131722]'}>{stockName}</span>
           <span className="text-gray-400">• {timeframe} • NSE</span>
