@@ -1,281 +1,97 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-export const useTradingStore = create(
-  persist(
-    (set, get) => ({
-      theme: 'light', // 'light' | 'dark' | 'midnight'
-      walletBalance: 1000000.0,
-      usedMargin: 0.0,
-      selectedStock: {
-        symbol: 'RELIANCE',
-        name: 'Reliance Industries Ltd.',
-        price: 2980.50,
-        change: 35.40,
-        changePercent: 1.20,
-        exchange: 'NSE',
-      },
-      holdings: [],
-      orders: [],
-      closedTrades: [],
+const INITIAL_STOCKS = [
+  { id: '1', symbol: 'RELIANCE', name: 'Reliance Industries Ltd.', price: 2993.75, change: 12.45, changePercent: 0.42 },
+  { id: '2', symbol: 'TCS', name: 'Tata Consultancy Services', price: 4180.50, change: -18.20, changePercent: -0.43 },
+  { id: '3', symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', price: 1640.10, change: 8.90, changePercent: 0.55 },
+  { id: '4', symbol: 'INFY', name: 'Infosys Ltd', price: 1785.00, change: -5.60, changePercent: -0.31 },
+  { id: '5', symbol: 'ICICIBANK', name: 'ICICI Bank Ltd', price: 1190.25, change: 14.30, changePercent: 1.22 },
+  { id: '6', symbol: 'SBIN', name: 'State Bank of India', price: 835.40, change: 3.10, changePercent: 0.37 },
+  { id: '7', symbol: 'BHARTIARTL', name: 'Bharti Airtel Ltd', price: 1420.80, change: -2.40, changePercent: -0.17 },
+  { id: '8', symbol: 'TATAMOTORS', name: 'Tata Motors Ltd', price: 1045.60, change: 16.80, changePercent: 1.63 },
+];
 
-      setTheme: (theme) => set({ theme }),
-      setSelectedStock: (stock) => set({ selectedStock: stock }),
+export const useTradingStore = create((set, get) => ({
+  theme: 'dark',
+  cash: 989544.00,
+  watchlist: INITIAL_STOCKS,
+  selectedStock: INITIAL_STOCKS[7], // Default Tata Motors
+  positions: [],
+  orders: [],
 
-      // BUY EXECUTION
-      buyStock: (symbol, name, quantity, price, productType = 'Trading') => {
-        const { walletBalance, usedMargin, holdings, orders, closedTrades } = get();
-        const leverage = productType === 'Trading' ? 0.20 : productType === 'MTF' ? 0.25 : 1.0;
-        const requiredMargin = quantity * price * leverage;
+  setSelectedStock: (stock) => set({ selectedStock: stock }),
+  
+  executeOrder: ({ type, symbol, qty, price, product = 'INTRADAY' }) => {
+    const numQty = parseInt(qty, 10) || 1;
+    const numPrice = parseFloat(price) || get().selectedStock?.price || 1000;
+    const orderCost = numQty * numPrice;
+    const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-        const existingIndex = holdings.findIndex(
-          (h) => h.symbol === symbol && (h.productType || 'Trading') === productType
-        );
-        let updatedHoldings = [...holdings];
+    // 1. Add Order to Log
+    const newOrder = {
+      id: Date.now().toString(),
+      time,
+      type,
+      symbol,
+      qty: numQty,
+      price: numPrice,
+      product,
+      status: 'EXECUTED',
+    };
 
-        // Short Position Cover/Exit
-        if (existingIndex > -1 && updatedHoldings[existingIndex].quantity < 0) {
-          const current = updatedHoldings[existingIndex];
-          const shortQty = Math.abs(current.quantity);
-          const closeQty = Math.min(quantity, shortQty);
+    // 2. Update Positions
+    let updatedPositions = [...get().positions];
+    const existingIndex = updatedPositions.findIndex((p) => p.symbol === symbol && p.product === product);
 
-          const realizedPnl = (current.avgPrice - price) * closeQty;
-          const blockedMargin = closeQty * current.avgPrice * leverage;
-          const returnPercent = ((current.avgPrice - price) / current.avgPrice) * 100;
+    if (existingIndex > -1) {
+      const existing = updatedPositions[existingIndex];
+      let newQty = type === 'BUY' ? existing.qty + numQty : existing.qty - numQty;
 
-          const remainingQty = current.quantity + closeQty;
-          if (remainingQty === 0) {
-            updatedHoldings.splice(existingIndex, 1);
-          } else {
-            updatedHoldings[existingIndex] = { ...current, quantity: remainingQty };
-          }
-
-          const newWalletBalance = parseFloat((walletBalance + blockedMargin + realizedPnl).toFixed(2));
-          const newUsedMargin = Math.max(0, parseFloat((usedMargin - blockedMargin).toFixed(2)));
-
-          const tradeRecord = {
-            id: Date.now(),
-            symbol,
-            type: 'SHORT',
-            productType,
-            quantity: closeQty,
-            entryPrice: current.avgPrice,
-            exitPrice: price,
-            realizedPnl: parseFloat(realizedPnl.toFixed(2)),
-            returnPercent: parseFloat(returnPercent.toFixed(2)),
-            entryTime: current.openedAt || new Date().toLocaleTimeString(),
-            exitTime: new Date().toLocaleTimeString(),
-          };
-
-          set({
-            walletBalance: newWalletBalance,
-            usedMargin: newUsedMargin,
-            holdings: updatedHoldings,
-            closedTrades: [tradeRecord, ...closedTrades],
-            orders: [
-              {
-                id: Date.now(),
-                symbol,
-                type: 'BUY (COVER)',
-                productType,
-                quantity: closeQty,
-                price,
-                time: new Date().toLocaleTimeString(),
-                status: 'EXECUTED',
-              },
-              ...orders,
-            ],
-          });
-          return true;
-        }
-
-        // Fresh Long Buy
-        if (walletBalance < requiredMargin) {
-          alert('Insufficient funds to place this order!');
-          return false;
-        }
-
-        if (existingIndex > -1) {
-          const current = updatedHoldings[existingIndex];
-          const newQty = current.quantity + quantity;
-          const newAvg = (current.quantity * current.avgPrice + quantity * price) / newQty;
-          updatedHoldings[existingIndex] = {
-            ...current,
-            quantity: newQty,
-            avgPrice: newAvg,
-          };
-        } else {
-          updatedHoldings.push({
-            symbol,
-            name: name || symbol,
-            quantity,
-            avgPrice: price,
-            productType,
-            openedAt: new Date().toLocaleTimeString(),
-          });
-        }
-
-        const newWalletBalance = parseFloat((walletBalance - requiredMargin).toFixed(2));
-        const newUsedMargin = parseFloat((usedMargin + requiredMargin).toFixed(2));
-
-        set({
-          walletBalance: newWalletBalance,
-          usedMargin: newUsedMargin,
-          holdings: updatedHoldings,
-          orders: [
-            {
-              id: Date.now(),
-              symbol,
-              type: 'BUY',
-              productType,
-              quantity,
-              price,
-              time: new Date().toLocaleTimeString(),
-              status: 'EXECUTED',
-            },
-            ...orders,
-          ],
-        });
-        return true;
-      },
-
-      // SELL EXECUTION
-      sellStock: (symbol, name, quantity, price, productType = 'Trading') => {
-        const { walletBalance, usedMargin, holdings, orders, closedTrades } = get();
-        const leverage = productType === 'Trading' ? 0.20 : productType === 'MTF' ? 0.25 : 1.0;
-        const requiredMargin = quantity * price * leverage;
-
-        const existingIndex = holdings.findIndex(
-          (h) => h.symbol === symbol && (h.productType || 'Trading') === productType
-        );
-        let updatedHoldings = [...holdings];
-
-        // Long Exit
-        if (existingIndex > -1 && updatedHoldings[existingIndex].quantity > 0) {
-          const current = updatedHoldings[existingIndex];
-          const closeQty = Math.min(quantity, current.quantity);
-
-          const realizedPnl = (price - current.avgPrice) * closeQty;
-          const blockedMargin = closeQty * current.avgPrice * leverage;
-          const returnPercent = ((price - current.avgPrice) / current.avgPrice) * 100;
-
-          const remainingQty = current.quantity - closeQty;
-          if (remainingQty === 0) {
-            updatedHoldings.splice(existingIndex, 1);
-          } else {
-            updatedHoldings[existingIndex] = { ...current, quantity: remainingQty };
-          }
-
-          const newWalletBalance = parseFloat((walletBalance + blockedMargin + realizedPnl).toFixed(2));
-          const newUsedMargin = Math.max(0, parseFloat((usedMargin - blockedMargin).toFixed(2)));
-
-          const tradeRecord = {
-            id: Date.now(),
-            symbol,
-            type: 'LONG',
-            productType,
-            quantity: closeQty,
-            entryPrice: current.avgPrice,
-            exitPrice: price,
-            realizedPnl: parseFloat(realizedPnl.toFixed(2)),
-            returnPercent: parseFloat(returnPercent.toFixed(2)),
-            entryTime: current.openedAt || new Date().toLocaleTimeString(),
-            exitTime: new Date().toLocaleTimeString(),
-          };
-
-          set({
-            walletBalance: newWalletBalance,
-            usedMargin: newUsedMargin,
-            holdings: updatedHoldings,
-            closedTrades: [tradeRecord, ...closedTrades],
-            orders: [
-              {
-                id: Date.now(),
-                symbol,
-                type: 'SELL (EXIT)',
-                productType,
-                quantity: closeQty,
-                price,
-                time: new Date().toLocaleTimeString(),
-                status: 'EXECUTED',
-              },
-              ...orders,
-            ],
-          });
-          return true;
-        }
-
-        if (productType === 'Investing') {
-          alert('Delivery Sell Error: You do not have delivery shares to sell!');
-          return false;
-        }
-
-        // Fresh Short
-        if (walletBalance < requiredMargin) {
-          alert('Insufficient margin for Intraday Short Selling!');
-          return false;
-        }
-
-        updatedHoldings.push({
-          symbol,
-          name: name || symbol,
-          quantity: -quantity,
-          avgPrice: price,
-          productType,
-          openedAt: new Date().toLocaleTimeString(),
-        });
-
-        const newWalletBalance = parseFloat((walletBalance - requiredMargin).toFixed(2));
-        const newUsedMargin = parseFloat((usedMargin + requiredMargin).toFixed(2));
-
-        set({
-          walletBalance: newWalletBalance,
-          usedMargin: newUsedMargin,
-          holdings: updatedHoldings,
-          orders: [
-            {
-              id: Date.now(),
-              symbol,
-              type: 'SELL (SHORT)',
-              productType,
-              quantity,
-              price,
-              time: new Date().toLocaleTimeString(),
-              status: 'EXECUTED',
-            },
-            ...orders,
-          ],
-        });
-        return true;
-      },
-
-      squareOffPosition: (symbol, productType, currentLtp) => {
-        const { holdings, sellStock, buyStock } = get();
-        const position = holdings.find(
-          (h) => h.symbol === symbol && (h.productType || 'Trading') === productType
-        );
-        if (!position) return;
-
-        const absQty = Math.abs(position.quantity);
-        if (position.quantity > 0) {
-          sellStock(position.symbol, position.name, absQty, currentLtp, position.productType || 'Trading');
-        } else {
-          buyStock(position.symbol, position.name, absQty, currentLtp, position.productType || 'Trading');
-        }
-      },
-
-      resetWallet: () => {
-        set({
-          walletBalance: 1000000.0,
-          usedMargin: 0.0,
-          holdings: [],
-          orders: [],
-          closedTrades: [],
-        });
-      },
-    }),
-    {
-      name: 'finedge-trading-storage',
+      if (newQty <= 0) {
+        updatedPositions.splice(existingIndex, 1);
+      } else {
+        const totalCost = type === 'BUY' 
+          ? (existing.avgPrice * existing.qty) + orderCost 
+          : existing.avgPrice * newQty;
+        const avgPrice = parseFloat((totalCost / (type === 'BUY' ? existing.qty + numQty : newQty)).toFixed(2));
+        
+        updatedPositions[existingIndex] = {
+          ...existing,
+          qty: newQty,
+          avgPrice: type === 'BUY' ? avgPrice : existing.avgPrice,
+        };
+      }
+    } else if (type === 'BUY') {
+      updatedPositions.push({
+        id: Date.now().toString(),
+        symbol,
+        product,
+        qty: numQty,
+        avgPrice: numPrice,
+      });
     }
-  )
-);
+
+    set((state) => ({
+      orders: [newOrder, ...state.orders],
+      positions: updatedPositions,
+      cash: type === 'BUY' ? state.cash - orderCost : state.cash + orderCost,
+    }));
+  },
+
+  closePosition: (symbol, product) => {
+    const pos = get().positions.find((p) => p.symbol === symbol && p.product === product);
+    if (!pos) return;
+    const stock = get().watchlist.find((s) => s.symbol === symbol) || get().selectedStock;
+    const ltp = stock?.price || pos.avgPrice;
+    
+    get().executeOrder({
+      type: 'SELL',
+      symbol: pos.symbol,
+      qty: pos.qty,
+      price: ltp,
+      product: pos.product,
+    });
+  },
+
+  checkAutoTriggers: () => {},
+}));

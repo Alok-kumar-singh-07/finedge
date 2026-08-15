@@ -250,7 +250,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const lastCandle = formattedData[formattedData.length - 1];
     currentCandleRef.current = lastCandle;
 
-    // Asynchronous state update to prevent cascading effect render
     if (lastCandle) {
       requestAnimationFrame(() => {
         setOhlc(lastCandle);
@@ -335,8 +334,38 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       style={{ backgroundColor: bgColor }}
       className="w-full h-full relative overflow-hidden select-none"
     >
-      {/* Top Legend Bar */}
-      <div className="absolute top-2 left-32 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
+      {/* Floating Buy/Sell Order Pill */}
+      <div className="absolute top-2 left-3 z-30 flex items-center gap-1 shadow-md font-sans">
+        <button
+          onClick={() => onOpenOrder && onOpenOrder('SELL')}
+          className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-2.5 py-1 rounded-l text-[11px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
+        >
+          <span>{stockPrice.toFixed(2)}</span>
+          <span className="text-[8px] font-normal opacity-90">SELL</span>
+        </button>
+
+        <div
+          style={{
+            backgroundColor: isDark ? '#151922' : '#f0f3fa',
+            borderColor: borderColor,
+            color: isDark ? '#ffffff' : '#131722',
+          }}
+          className="px-2 py-1 text-[11px] font-bold border-y flex items-center justify-center font-mono"
+        >
+          0.00
+        </div>
+
+        <button
+          onClick={() => onOpenOrder && onOpenOrder('BUY')}
+          className="bg-[#2962ff] hover:bg-[#1e53e5] text-white px-2.5 py-1 rounded-r text-[11px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
+        >
+          <span>{stockPrice.toFixed(2)}</span>
+          <span className="text-[8px] font-normal opacity-90">BUY</span>
+        </button>
+      </div>
+
+      {/* Top Legend Bar (Properly Offset to Avoid Overlap) */}
+      <div className="absolute top-2.5 left-48 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
         <div className="flex items-center gap-1 font-bold">
           <span className={isDark ? 'text-white' : 'text-[#131722]'}>{stockName}</span>
           <span className="text-gray-400">• {timeframe} • NSE</span>
@@ -351,36 +380,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
             {isPos ? '+' : ''}{stockChange.toFixed(2)} ({isPos ? '+' : ''}{stockPercent.toFixed(2)}%)
           </span>
         </div>
-      </div>
-
-      {/* Floating Buy/Sell Order Pill */}
-      <div className="absolute top-2 left-3 z-20 flex items-center gap-1 shadow-xs font-sans">
-        <button
-          onClick={() => onOpenOrder && onOpenOrder('SELL')}
-          className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-2 py-0.5 rounded-l text-[10px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
-        >
-          <span>{stockPrice.toFixed(2)}</span>
-          <span className="text-[8px] font-normal opacity-90">SELL</span>
-        </button>
-
-        <div
-          style={{
-            backgroundColor: isDark ? '#151922' : '#f0f3fa',
-            borderColor: borderColor,
-            color: isDark ? '#ffffff' : '#131722',
-          }}
-          className="px-1.5 py-0.5 text-[10px] font-bold border-y flex items-center justify-center font-mono"
-        >
-          0.00
-        </div>
-
-        <button
-          onClick={() => onOpenOrder && onOpenOrder('BUY')}
-          className="bg-[#2962ff] hover:bg-[#1e53e5] text-white px-2 py-0.5 rounded-r text-[10px] font-bold flex flex-col items-center leading-tight cursor-pointer transition-all active:scale-95 shadow"
-        >
-          <span>{stockPrice.toFixed(2)}</span>
-          <span className="text-[8px] font-normal opacity-90">BUY</span>
-        </button>
       </div>
 
       {/* DRAGGABLE EMA WIDGET */}
