@@ -1,118 +1,88 @@
-import { useState } from 'react';
-import { Search, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { useTradingStore } from '../store/useTradingStore';
+import { useState, useEffect } from 'react';
+import useTradingStore from '../store/useTradingStore';
+import { NSE_STOCKS_DIRECTORY, fetchLiveMarketData } from '../dhanApi';
 
-export default function Watchlist({ onMinimize }) {
-  const store = useTradingStore();
-  const watchlist = Array.isArray(store?.watchlist) ? store.watchlist : [];
-  const selectedStock = store?.selectedStock || watchlist[0];
-  const setSelectedStock = store?.setSelectedStock || (() => {});
-
+export default function Watchlist() {
+  const { selectedStock, setSelectedStock } = useTradingStore();
+  const [stocks, setStocks] = useState(NSE_STOCKS_DIRECTORY || []);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('All');
 
-  const filteredStocks = watchlist.filter((stock) => {
-    if (!stock) return false;
-    const matchesSearch = 
-      (stock.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (stock.symbol || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (activeTab === 'All') return matchesSearch;
-    return matchesSearch && stock.sector === activeTab;
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const updatePrices = async () => {
+      if (!selectedStock?.id) return;
+      try {
+        const liveData = await fetchLiveMarketData(selectedStock.id);
+        if (liveData && liveData.price && isMounted) {
+          setStocks((prev) =>
+            prev.map((s) =>
+              s.id === selectedStock.id
+                ? { ...s, price: liveData.price, change: liveData.change }
+                : s
+            )
+          );
+        }
+      } catch (err) {
+        console.error('Price update error:', err);
+      }
+    };
+
+    updatePrices();
+    const interval = setInterval(updatePrices, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedStock]);
+
+  const filteredStocks = (stocks || []).filter(
+    (stock) =>
+      stock?.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      stock?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex flex-col h-full bg-[#0E131F] text-slate-200 border-r border-[#1E293B] select-none text-xs">
-      {/* Search Header with Minimize Button */}
-      <div className="p-2 border-b border-[#1E293B]">
-        <div className="flex items-center gap-1.5">
-          <div className="relative flex-1 flex items-center">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search stock, index..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#151C2C] text-slate-200 pl-8 pr-2 py-1.5 rounded text-xs outline-none border border-transparent focus:border-blue-500 placeholder-slate-500"
-            />
-          </div>
-
-          {/* Minimize / Collapse Button */}
-          {onMinimize && (
-            <button
-              onClick={onMinimize}
-              title="Minimize Watchlist"
-              className="p-1.5 rounded bg-[#151C2C] hover:bg-slate-700 text-slate-400 hover:text-white border border-[#1E293B] transition cursor-pointer flex items-center justify-center"
-            >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Categorized Filter Tabs */}
-        <div className="flex items-center gap-1 mt-2 text-[11px] font-semibold text-slate-400 overflow-x-auto pb-0.5">
-          {['All', 'Nifty 50', 'Bank', 'F&O'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-2 py-0.5 rounded cursor-pointer transition ${
-                activeTab === tab ? 'bg-blue-600 text-white font-bold' : 'hover:bg-slate-800'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-          <span className="ml-auto text-[10px] text-slate-500 px-1 font-mono">
-            {filteredStocks.length} / {watchlist.length}
-          </span>
-        </div>
+    <div className="h-full flex flex-col bg-white border-l border-gray-200">
+      <div className="p-2 border-b border-gray-100">
+        <input
+          type="text"
+          placeholder="Search NSE stocks..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-2.5 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+        />
       </div>
 
-      {/* Stock Items List */}
-      <div className="flex-1 overflow-y-auto divide-y divide-[#1A2234]">
-        {filteredStocks.length > 0 ? (
-          filteredStocks.map((stock) => {
-            const isSelected = selectedStock?.symbol === stock?.symbol;
-            const isPos = (stock?.change || 0) >= 0;
+      <div className="flex-1 overflow-y-auto">
+        {filteredStocks.map((stock) => {
+          const isSelected = selectedStock?.symbol === stock.symbol;
+          const isPositive = (stock.change || 0) >= 0;
 
-            return (
-              <div
-                key={stock.id || stock.symbol}
-                onClick={() => setSelectedStock(stock)}
-                className={`flex items-center justify-between p-2.5 cursor-pointer transition-all hover:bg-[#151C2C] ${
-                  isSelected ? 'bg-[#151C2C] border-l-2 border-blue-500' : ''
-                }`}
-              >
-                <div className="flex flex-col">
-                  <span className="font-bold text-slate-100 text-xs">{stock.symbol}</span>
-                  <span className="text-[10px] text-slate-500 truncate max-w-[120px]">
-                    {stock.name || stock.symbol}
-                  </span>
+          return (
+            <div
+              key={stock.id || stock.symbol}
+              onClick={() => setSelectedStock(stock)}
+              className={`flex items-center justify-between px-3 py-2 cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors ${
+                isSelected ? 'bg-blue-50/70 border-l-4 border-l-blue-600' : ''
+              }`}
+            >
+              <div>
+                <div className="text-xs font-semibold text-gray-900">{stock.symbol}</div>
+                <div className="text-[10px] text-gray-400 truncate max-w-[120px]">{stock.name}</div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-xs font-mono font-medium text-gray-900">
+                  ₹{Number(stock.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
-
-                <div className="flex flex-col items-end">
-                  <span className={`font-mono font-bold text-xs ${isPos ? 'text-[#089981]' : 'text-[#f23645]'}`}>
-                    ₹{Number(stock.price || 0).toFixed(2)}
-                  </span>
-                  <div className="flex items-center gap-0.5 text-[10px] font-mono">
-                    {isPos ? (
-                      <TrendingUp className="w-2.5 h-2.5 text-[#089981]" />
-                    ) : (
-                      <TrendingDown className="w-2.5 h-2.5 text-[#f23645]" />
-                    )}
-                    <span className={isPos ? 'text-[#089981]' : 'text-[#f23645]'}>
-                      {isPos ? '+' : ''}{Number(stock.change || 0).toFixed(2)} ({isPos ? '+' : ''}{Number(stock.changePercent || 0).toFixed(2)}%)
-                    </span>
-                  </div>
+                <div className={`text-[10px] font-mono font-medium ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {isPositive ? '+' : ''}{stock.change || 0}%
                 </div>
               </div>
-            );
-          })
-        ) : (
-          <div className="p-4 text-center text-slate-500 text-xs">
-            No stocks found in "{activeTab}"
-          </div>
-        )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

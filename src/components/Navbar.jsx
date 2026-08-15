@@ -1,5 +1,5 @@
 import { Search, Moon, Sun } from 'lucide-react';
-import { useTradingStore } from '../store/useTradingStore';
+import useTradingStore from '../store/useTradingStore';
 
 export default function Navbar({ onOpenOrder, onToggleWatchlist, timeframe, setTimeframe }) {
   const store = useTradingStore();
