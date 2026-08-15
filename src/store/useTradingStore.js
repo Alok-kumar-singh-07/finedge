@@ -13,32 +13,55 @@ const INITIAL_STOCKS = [
 
 export const useTradingStore = create((set, get) => ({
   theme: 'dark',
-  cash: 1000000.00, // ₹10,00,000 standard virtual capital
+  cash: 1000000.00,
   watchlist: INITIAL_STOCKS,
-  selectedStock: INITIAL_STOCKS[7], // Default Tata Motors
+  selectedStock: INITIAL_STOCKS[7], // Tata Motors
   positions: [],
   orders: [],
 
   setSelectedStock: (stock) => set({ selectedStock: stock }),
-  
+
+  // Real-time price sync between Chart, Watchlist & Positions Table
+  updateStockPrice: (symbol, newPrice) => {
+    const parsedPrice = parseFloat(newPrice);
+    if (isNaN(parsedPrice)) return;
+
+    set((state) => {
+      const updatedWatchlist = state.watchlist.map((s) => {
+        if (s.symbol === symbol) {
+          const change = parseFloat((parsedPrice - (s.price - s.change)).toFixed(2));
+          const changePercent = parseFloat(((change / (parsedPrice - change)) * 100).toFixed(2));
+          return { ...s, price: parsedPrice, change, changePercent };
+        }
+        return s;
+      });
+
+      const updatedSelected = state.selectedStock?.symbol === symbol
+        ? { ...state.selectedStock, price: parsedPrice }
+        : state.selectedStock;
+
+      return {
+        watchlist: updatedWatchlist,
+        selectedStock: updatedSelected,
+      };
+    });
+  },
+
   executeOrder: ({ type, symbol, qty, price, product = 'INTRADAY' }) => {
     const numQty = Math.max(1, parseInt(qty, 10) || 1);
     const numPrice = parseFloat(price) || get().selectedStock?.price || 1000;
     
-    // Leverage Multiplier
     const leverage = product === 'INTRADAY' ? 5 : product === 'MTF' ? 4 : 1;
     const totalTradeValue = numQty * numPrice;
     const requiredMargin = totalTradeValue / leverage;
     const currentCash = get().cash;
     const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Validate Actual Required Margin against available cash
     if (type === 'BUY' && currentCash < requiredMargin) {
       alert(`Insufficient Funds! Required Margin: ₹${requiredMargin.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, Available: ₹${currentCash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
       return;
     }
 
-    // 1. Log Order Record
     const newOrder = {
       id: Date.now().toString(),
       time,
@@ -50,19 +73,18 @@ export const useTradingStore = create((set, get) => ({
       status: 'EXECUTED',
     };
 
-    // 2. Manage Position
     let updatedPositions = [...get().positions];
     const posIndex = updatedPositions.findIndex((p) => p.symbol === symbol && p.product === product);
 
     if (type === 'BUY') {
       if (posIndex > -1) {
         const exist = updatedPositions[posIndex];
-        const combinedValue = (exist.avgPrice * exist.qty) + totalTradeValue;
+        const combinedCost = (exist.avgPrice * exist.qty) + totalTradeValue;
         const totalQty = exist.qty + numQty;
         updatedPositions[posIndex] = {
           ...exist,
           qty: totalQty,
-          avgPrice: parseFloat((combinedValue / totalQty).toFixed(2)),
+          avgPrice: parseFloat((combinedCost / totalQty).toFixed(2)),
           marginBlocked: (exist.marginBlocked || 0) + requiredMargin,
         };
       } else {
@@ -81,7 +103,6 @@ export const useTradingStore = create((set, get) => ({
         positions: updatedPositions,
       }));
     } else {
-      // SELL Execution / Square Off
       if (posIndex > -1) {
         const exist = updatedPositions[posIndex];
         if (exist.qty > numQty) {
@@ -98,7 +119,6 @@ export const useTradingStore = create((set, get) => ({
             positions: updatedPositions,
           }));
         } else {
-          // Completely close position
           const pnl = (numPrice - exist.avgPrice) * exist.qty;
           const returnFunds = exist.marginBlocked + pnl;
           updatedPositions.splice(posIndex, 1);
@@ -109,7 +129,6 @@ export const useTradingStore = create((set, get) => ({
           }));
         }
       } else {
-        // Intraday Short Sell
         updatedPositions.push({
           id: Date.now().toString(),
           symbol,

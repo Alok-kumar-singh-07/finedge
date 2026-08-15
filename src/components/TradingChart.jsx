@@ -63,12 +63,13 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
 
   const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
 
-  const { theme } = useTradingStore();
-  const stockSymbol = activeStock?.symbol || 'RELIANCE';
+  const store = useTradingStore();
+  const { theme, updateStockPrice } = store;
+  const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 2993.75);
-  const stockChange = parseNum(activeStock?.change, 12.45);
-  const stockPercent = parseNum(activeStock?.changePercent, 0.42);
+  const stockPrice = parseNum(activeStock?.price, 1045.60);
+  const stockChange = parseNum(activeStock?.change, 16.80);
+  const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
   const isDark = theme === 'dark' || theme === 'midnight';
@@ -286,10 +287,10 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
-    // Live Tick Simulation (Move Last Candle live)
+    // Real-Time Ticks & Global Store Sync
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
-      const delta = (Math.random() - 0.49) * 0.8;
+      const delta = (Math.random() - 0.48) * 0.9;
       const newClose = parseFloat((currentCandleRef.current.close + delta).toFixed(2));
       const newHigh = Math.max(currentCandleRef.current.high, newClose);
       const newLow = Math.min(currentCandleRef.current.low, newClose);
@@ -303,7 +304,12 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       currentCandleRef.current = tickCandle;
       candleSeriesRef.current.update(tickCandle);
       setOhlc(tickCandle);
-    }, 1500);
+
+      // Push real-time price to global store so Position Table and P&L update live
+      if (typeof updateStockPrice === 'function') {
+        updateStockPrice(stockSymbol, newClose);
+      }
+    }, 1200);
 
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0 || !chartRef.current) return;
@@ -428,7 +434,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </button>
       </div>
 
-      {/* Chart Canvas (Fully Interactive Pan & Zoom) */}
+      {/* Chart Canvas */}
       <div className="w-full h-full cursor-crosshair" ref={chartContainerRef} />
     </div>
   );
