@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import Navbar from './components/Navbar';
 import TradingChart from './components/TradingChart';
 import OrderModal from './components/OrderModal';
@@ -65,9 +66,20 @@ export default function App() {
         </div>
 
         {/* Collapsible Watchlist Sidebar */}
-        <div className={`${isWatchlistOpen ? 'w-80' : 'w-0'} transition-all duration-200 ease-in-out border-r border-[#1E293B] bg-[#0E131F] shrink-0 overflow-hidden flex flex-col hidden lg:flex`}>
-          <Watchlist />
+        <div className={`${isWatchlistOpen ? 'w-80' : 'w-0'} transition-all duration-300 ease-in-out border-r border-[#1E293B] bg-[#0E131F] shrink-0 overflow-hidden flex flex-col hidden lg:flex relative`}>
+          <Watchlist onMinimize={() => setIsWatchlistOpen(false)} />
         </div>
+
+        {/* Re-open Floating Arrow Tab (Visible only when Watchlist is minimized) */}
+        {!isWatchlistOpen && (
+          <button
+            onClick={() => setIsWatchlistOpen(true)}
+            title="Open Watchlist"
+            className="hidden lg:flex absolute top-4 left-14 z-40 bg-[#1E293B] hover:bg-blue-600 text-slate-300 hover:text-white p-1.5 rounded-r-md border-y border-r border-slate-700 shadow-lg cursor-pointer transition-all items-center justify-center"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Center Workspace: Chart + Bottom Dock */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -155,7 +167,7 @@ export default function App() {
                                 <td className="p-2 font-mono">₹{p.avgPrice.toFixed(2)}</td>
                                 <td className="p-2 font-mono">₹{ltp.toFixed(2)}</td>
                                 <td className={`p-2 font-mono font-bold ${isProfit ? 'text-[#089981]' : 'text-[#f23645]'}`}>
-                                  {isProfit ? '+' : ''}₹{pnl.toFixed(2)} ({isProfit ? '+' : ''}{((pnl / (p.avgPrice * p.qty)) * 100).toFixed(2)}%)
+                                  {isProfit ? '+' : ''}₹{pnl.toFixed(2)} ({isProfit ? '+' : ''}{((pnl / (p.avgPrice * Math.abs(p.qty))) * 100).toFixed(2)}%)
                                 </td>
                                 <td className="p-2 text-right">
                                   <button

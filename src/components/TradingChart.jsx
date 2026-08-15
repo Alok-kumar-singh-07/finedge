@@ -64,11 +64,11 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const [ohlc, setOhlc] = useState({ open: 0, high: 0, low: 0, close: 0 });
 
   const { theme } = useTradingStore();
-  const stockSymbol = activeStock?.symbol || 'HDFCBANK';
+  const stockSymbol = activeStock?.symbol || 'RELIANCE';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 1640);
-  const stockChange = parseNum(activeStock?.change, 8.9);
-  const stockPercent = parseNum(activeStock?.changePercent, 0.55);
+  const stockPrice = parseNum(activeStock?.price, 2993.75);
+  const stockChange = parseNum(activeStock?.change, 12.45);
+  const stockPercent = parseNum(activeStock?.changePercent, 0.42);
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
   const isDark = theme === 'dark' || theme === 'midnight';
@@ -137,11 +137,22 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
           timeVisible: !isDailyOrAbove,
           secondsVisible: false,
           barSpacing: timeframe === '1M' ? 14 : timeframe === '1W' ? 10 : 8,
-          minBarSpacing: 3,
-          rightOffset: 20,
+          minBarSpacing: 2,
+          rightOffset: 15,
+          fixLeftEdge: false,
+          fixRightEdge: false,
         },
-        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-        handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
+        handleScale: {
+          axisPressedMouseMove: { time: true, price: true },
+          mouseWheel: true,
+          pinch: true,
+        },
       });
     } catch (e) {
       console.error("Chart creation error:", e);
@@ -210,7 +221,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const generatedReversed = [];
     const volumeData = [];
     const now = new Date();
-    // Warmup buffer ensures EMA50 renders completely
     const totalBars = timeframe === '1M' ? 120 : timeframe === '1W' ? 200 : 250;
 
     for (let i = 0; i < totalBars; i++) {
@@ -276,6 +286,25 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
+    // Live Tick Simulation (Move Last Candle live)
+    const tickInterval = setInterval(() => {
+      if (!currentCandleRef.current || !candleSeriesRef.current) return;
+      const delta = (Math.random() - 0.49) * 0.8;
+      const newClose = parseFloat((currentCandleRef.current.close + delta).toFixed(2));
+      const newHigh = Math.max(currentCandleRef.current.high, newClose);
+      const newLow = Math.min(currentCandleRef.current.low, newClose);
+
+      const tickCandle = {
+        ...currentCandleRef.current,
+        high: newHigh,
+        low: newLow,
+        close: newClose,
+      };
+      currentCandleRef.current = tickCandle;
+      candleSeriesRef.current.update(tickCandle);
+      setOhlc(tickCandle);
+    }, 1500);
+
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0 || !chartRef.current) return;
       const { width: w, height: h } = entries[0].contentRect;
@@ -289,6 +318,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     }
 
     return () => {
+      clearInterval(tickInterval);
       resizeObserver.disconnect();
       if (chartRef.current) {
         chartRef.current.remove();
@@ -297,19 +327,6 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockSymbol, timeframe, theme]);
-
-  useEffect(() => {
-    if (!candleSeriesRef.current || !stockPrice || !currentCandleRef.current) return;
-    const updatedCandle = {
-      ...currentCandleRef.current,
-      high: parseFloat(Math.max(currentCandleRef.current.high, stockPrice).toFixed(2)),
-      low: parseFloat(Math.min(currentCandleRef.current.low, stockPrice).toFixed(2)),
-      close: parseFloat(stockPrice.toFixed(2)),
-    };
-    currentCandleRef.current = updatedCandle;
-    candleSeriesRef.current.update(updatedCandle);
-    setOhlc(updatedCandle);
-  }, [stockPrice]);
 
   useEffect(() => {
     if (ema9SeriesRef.current) ema9SeriesRef.current.applyOptions({ visible: showEMA9 });
@@ -354,7 +371,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </button>
       </div>
 
-      {/* Top Legend Bar (Proper 210px margin to completely avoid overlap) */}
+      {/* Top Legend Bar */}
       <div className="absolute top-2.5 left-52 z-20 flex items-center gap-3 font-sans text-xs pointer-events-none">
         <div className="flex items-center gap-1 font-bold">
           <span className={isDark ? 'text-white' : 'text-[#131722]'}>{stockName}</span>
@@ -411,7 +428,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </button>
       </div>
 
-      {/* Chart Canvas */}
+      {/* Chart Canvas (Fully Interactive Pan & Zoom) */}
       <div className="w-full h-full cursor-crosshair" ref={chartContainerRef} />
     </div>
   );

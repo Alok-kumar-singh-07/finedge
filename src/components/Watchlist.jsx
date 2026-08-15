@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Search, TrendingUp, TrendingDown } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
-export default function Watchlist() {
+export default function Watchlist({ onMinimize }) {
   const store = useTradingStore();
   const watchlist = Array.isArray(store?.watchlist) ? store.watchlist : [];
   const selectedStock = store?.selectedStock || watchlist[0];
@@ -23,20 +23,33 @@ export default function Watchlist() {
 
   return (
     <div className="flex flex-col h-full bg-[#0E131F] text-slate-200 border-r border-[#1E293B] select-none text-xs">
-      {/* Search Header */}
+      {/* Search Header with Minimize Button */}
       <div className="p-2 border-b border-[#1E293B]">
-        <div className="relative flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search stock, index..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-[#151C2C] text-slate-200 pl-8 pr-3 py-1.5 rounded text-xs outline-none border border-transparent focus:border-blue-500 placeholder-slate-500"
-          />
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1 flex items-center">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search stock, index..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#151C2C] text-slate-200 pl-8 pr-2 py-1.5 rounded text-xs outline-none border border-transparent focus:border-blue-500 placeholder-slate-500"
+            />
+          </div>
+
+          {/* Minimize / Collapse Button */}
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              title="Minimize Watchlist"
+              className="p-1.5 rounded bg-[#151C2C] hover:bg-slate-700 text-slate-400 hover:text-white border border-[#1E293B] transition cursor-pointer flex items-center justify-center"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        {/* Dynamic Categorized Filter Tabs */}
+        {/* Categorized Filter Tabs */}
         <div className="flex items-center gap-1 mt-2 text-[11px] font-semibold text-slate-400 overflow-x-auto pb-0.5">
           {['All', 'Nifty 50', 'Bank', 'F&O'].map((tab) => (
             <button
