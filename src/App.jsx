@@ -70,14 +70,14 @@ export default function App() {
           <Watchlist onMinimize={() => setIsWatchlistOpen(false)} />
         </div>
 
-        {/* Re-open Floating Arrow Tab (Visible only when Watchlist is minimized) */}
+        {/* Re-open Floating Arrow Tab (Shifted Down to top-14 to avoid Sell Button overlap) */}
         {!isWatchlistOpen && (
           <button
             onClick={() => setIsWatchlistOpen(true)}
             title="Open Watchlist"
-            className="hidden lg:flex absolute top-4 left-14 z-40 bg-[#1E293B] hover:bg-blue-600 text-slate-300 hover:text-white p-1.5 rounded-r-md border-y border-r border-slate-700 shadow-lg cursor-pointer transition-all items-center justify-center"
+            className="hidden lg:flex absolute top-14 left-12 z-40 bg-[#151C2C] hover:bg-blue-600 text-slate-300 hover:text-white px-1 py-2 rounded-r-md border-y border-r border-slate-700 shadow-xl cursor-pointer transition-all items-center justify-center"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         )}
 

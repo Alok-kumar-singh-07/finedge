@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { X, ShieldCheck } from 'lucide-react';
+import { X, ShieldCheck, Zap } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
 export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock }) {
   const store = useTradingStore();
   const executeOrder = store?.executeOrder || (() => {});
-  const cash = store?.cash ?? 1000000;
+  const rawCash = store?.cash ?? 1000000;
+  const cash = typeof rawCash === 'number' ? rawCash : parseFloat(rawCash) || 1000000;
 
   const [orderType, setOrderType] = useState(initialType);
   const [productType, setProductType] = useState('INTRADAY'); // INTRADAY | DELIVERY | MTF
@@ -17,8 +18,21 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
 
   const currentPrice = Number(stock?.price || 1000);
   const effectivePrice = orderCategory === 'LIMIT' && customPrice !== '' ? Number(customPrice) : currentPrice;
-  const totalCost = Number(quantity || 1) * effectivePrice;
+
+  // Multiplier based on selected product type
+  const leverageMultiplier = productType === 'INTRADAY' ? 5 : productType === 'MTF' ? 4 : 1;
+  const effectiveBuyingPower = cash * leverageMultiplier;
+
+  // Max Quantity calculated automatically
+  const maxAffordableQty = effectivePrice > 0 ? Math.max(1, Math.floor(effectiveBuyingPower / effectivePrice)) : 1;
+
+  // Margin required after leverage
+  const requiredMargin = (Number(quantity || 1) * effectivePrice) / leverageMultiplier;
   const isBuy = orderType === 'BUY';
+
+  const handleSetMaxQuantity = () => {
+    setQuantity(maxAffordableQty);
+  };
 
   const handleOrderSubmit = (e) => {
     e.preventDefault();
@@ -123,15 +137,29 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
           {/* Quantity & Price Inputs */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-slate-400 mb-1 block font-semibold">Quantity (Qty)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-slate-400 font-semibold">Quantity (Qty)</label>
+                {/* Clickable Maximum Quantity Button */}
+                <button
+                  type="button"
+                  onClick={handleSetMaxQuantity}
+                  className="text-[10px] text-blue-400 hover:text-blue-300 font-mono bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/30 flex items-center gap-0.5 cursor-pointer"
+                  title="Click to set max quantity based on funds"
+                >
+                  <Zap className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Max: {maxAffordableQty.toLocaleString('en-IN')}</span>
+                </button>
+              </div>
               <input
                 type="number"
                 min="1"
+                max={maxAffordableQty}
                 value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
                 className="w-full bg-[#0B0E14] border border-[#1E293B] focus:border-blue-500 rounded p-2 text-white font-mono text-xs outline-none"
               />
             </div>
+
             <div>
               <label className="text-[11px] text-slate-400 mb-1 block font-semibold">Price (₹)</label>
               <input
@@ -151,11 +179,11 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
           <div className="bg-[#0B0E14] p-2.5 rounded-lg border border-[#1E293B] flex items-center justify-between text-[11px]">
             <div>
               <span className="text-slate-400">Required Margin: </span>
-              <span className="font-bold text-white font-mono">₹{totalCost.toFixed(2)}</span>
+              <span className="font-bold text-white font-mono">₹{requiredMargin.toFixed(2)}</span>
             </div>
             <div>
               <span className="text-slate-400">Available: </span>
-              <span className="font-bold text-emerald-400 font-mono">₹{Number(cash).toLocaleString('en-IN')}</span>
+              <span className="font-bold text-emerald-400 font-mono">₹{cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
