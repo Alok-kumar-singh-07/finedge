@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart } from 'lightweight-charts';
+import * as LightweightCharts from 'lightweight-charts';
 import { GripVertical } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
+
+function parseNum(val, fallback = 0) {
+  const n = Number(val);
+  return isNaN(n) ? fallback : n;
+}
 
 function calculateAccurateEMA(data, period) {
   if (!data || data.length < period) return [];
@@ -13,7 +18,7 @@ function calculateAccurateEMA(data, period) {
   }
   let prevEMA = sum / period;
 
-  let emaArray = [];
+  const emaArray = [];
   emaArray.push({
     time: data[period - 1].time,
     value: parseFloat(prevEMA.toFixed(2)),
@@ -61,13 +66,13 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
   const { theme } = useTradingStore();
   const stockSymbol = activeStock?.symbol || 'STOCK';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = activeStock?.price || 200;
-  const stockChange = activeStock?.change || 0;
-  const stockPercent = activeStock?.changePercent || 0;
+  const stockPrice = parseNum(activeStock?.price, 200);
+  const stockChange = parseNum(activeStock?.change, 0);
+  const stockPercent = parseNum(activeStock?.changePercent, 0);
 
   const isDailyOrAbove = ['1D', '1W', '1M', '1Y'].includes(timeframe);
   const isDark = theme === 'dark' || theme === 'midnight';
-  const bgColor = theme === 'midnight' ? '#000000' : theme === 'dark' ? '#0B0E14' : '#ffffff';
+  const bgColor = theme === 'midnight' ? '#000000' : isDark ? '#0B0E14' : '#ffffff';
   const textColor = isDark ? '#8E9AA8' : '#131722';
   const gridColor = theme === 'midnight' ? '#141414' : isDark ? '#1E2533' : '#f0f3fa';
   const borderColor = isDark ? '#232936' : '#e0e3eb';
@@ -107,51 +112,82 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const width = chartContainerRef.current.clientWidth || 700;
     const height = chartContainerRef.current.clientHeight || 450;
 
-    const chart = createChart(chartContainerRef.current, {
-      width,
-      height,
-      layout: {
-        background: { color: bgColor },
-        textColor: textColor,
-      },
-      grid: {
-        vertLines: { color: gridColor },
-        horzLines: { color: gridColor },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: borderColor,
-        autoScale: true,
-        scaleMargins: { top: 0.08, bottom: 0.2 },
-        alignLabels: true,
-      },
-      timeScale: {
-        borderColor: borderColor,
-        timeVisible: !isDailyOrAbove,
-        secondsVisible: false,
-        barSpacing: timeframe === '1M' ? 20 : timeframe === '1W' ? 14 : 9,
-        minBarSpacing: 3,
-        rightOffset: 25,
-        fixLeftEdge: false,
-        fixRightEdge: false,
-      },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: true,
-      },
-      handleScale: {
-        axisPressedMouseMove: { time: true, price: true },
-        mouseWheel: true,
-        pinch: true,
-      },
-    });
+    let chartInstance;
+    try {
+      chartInstance = LightweightCharts.createChart(chartContainerRef.current, {
+        width,
+        height,
+        layout: {
+          background: { color: bgColor },
+          textColor: textColor,
+        },
+        grid: {
+          vertLines: { color: gridColor },
+          horzLines: { color: gridColor },
+        },
+        crosshair: { mode: 1 },
+        rightPriceScale: {
+          borderColor: borderColor,
+          autoScale: true,
+          scaleMargins: { top: 0.08, bottom: 0.2 },
+          alignLabels: true,
+        },
+        timeScale: {
+          borderColor: borderColor,
+          timeVisible: !isDailyOrAbove,
+          secondsVisible: false,
+          barSpacing: timeframe === '1M' ? 20 : timeframe === '1W' ? 14 : 9,
+          minBarSpacing: 3,
+          rightOffset: 25,
+          fixLeftEdge: false,
+          fixRightEdge: false,
+        },
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
+        handleScale: {
+          axisPressedMouseMove: { time: true, price: true },
+          mouseWheel: true,
+          pinch: true,
+        },
+      });
+    } catch (e) {
+      console.error("Chart initialization failed:", e);
+      return;
+    }
 
-    // Pure safe creation using chart methods
-    const candleSeries = chart.addCandlestickSeries({
+    const addSeriesHelper = (type, options) => {
+      if (type === 'Candlestick') {
+        if (typeof chartInstance.addCandlestickSeries === 'function') {
+          return chartInstance.addCandlestickSeries(options);
+        }
+        if (LightweightCharts.CandlestickSeries && typeof chartInstance.addSeries === 'function') {
+          return chartInstance.addSeries(LightweightCharts.CandlestickSeries, options);
+        }
+      }
+      if (type === 'Histogram') {
+        if (typeof chartInstance.addHistogramSeries === 'function') {
+          return chartInstance.addHistogramSeries(options);
+        }
+        if (LightweightCharts.HistogramSeries && typeof chartInstance.addSeries === 'function') {
+          return chartInstance.addSeries(LightweightCharts.HistogramSeries, options);
+        }
+      }
+      if (type === 'Line') {
+        if (typeof chartInstance.addLineSeries === 'function') {
+          return chartInstance.addLineSeries(options);
+        }
+        if (LightweightCharts.LineSeries && typeof chartInstance.addSeries === 'function') {
+          return chartInstance.addSeries(LightweightCharts.LineSeries, options);
+        }
+      }
+      return null;
+    };
+
+    const candleSeries = addSeriesHelper('Candlestick', {
       upColor: '#089981',
       downColor: '#f23645',
       borderVisible: true,
@@ -165,7 +201,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       priceLineStyle: 2,
     });
 
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = addSeriesHelper('Histogram', {
       color: '#089981',
       priceFormat: { type: 'volume' },
       priceScaleId: '',
@@ -177,29 +213,9 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       });
     }
 
-    const ema9 = chart.addLineSeries({
-      color: '#2962ff',
-      lineWidth: 1.5,
-      title: 'EMA 9',
-      priceLineVisible: false,
-      lastValueVisible: true,
-    });
-
-    const ema21 = chart.addLineSeries({
-      color: '#f5b041',
-      lineWidth: 1.5,
-      title: 'EMA 21',
-      priceLineVisible: false,
-      lastValueVisible: true,
-    });
-
-    const ema50 = chart.addLineSeries({
-      color: '#e74c3c',
-      lineWidth: 1.5,
-      title: 'EMA 50',
-      priceLineVisible: false,
-      lastValueVisible: true,
-    });
+    const ema9 = addSeriesHelper('Line', { color: '#2962ff', lineWidth: 1.5, title: 'EMA 9', priceLineVisible: false, lastValueVisible: true });
+    const ema21 = addSeriesHelper('Line', { color: '#f5b041', lineWidth: 1.5, title: 'EMA 21', priceLineVisible: false, lastValueVisible: true });
+    const ema50 = addSeriesHelper('Line', { color: '#e74c3c', lineWidth: 1.5, title: 'EMA 50', priceLineVisible: false, lastValueVisible: true });
 
     let currentWalkPrice = stockPrice;
     const generatedReversed = [];
@@ -233,7 +249,13 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
     const formattedData = generatedReversed.reverse();
     const lastCandle = formattedData[formattedData.length - 1];
     currentCandleRef.current = lastCandle;
-    setOhlc(lastCandle);
+
+    // Asynchronous state update to prevent cascading effect render
+    if (lastCandle) {
+      requestAnimationFrame(() => {
+        setOhlc(lastCandle);
+      });
+    }
 
     formattedData.forEach((bar) => {
       volumeData.push({
@@ -243,22 +265,22 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
       });
     });
 
-    candleSeries.setData(formattedData);
-    volumeSeries.setData(volumeData);
-    ema9.setData(calculateAccurateEMA(formattedData, 9));
-    ema21.setData(calculateAccurateEMA(formattedData, 21));
-    ema50.setData(calculateAccurateEMA(formattedData, 50));
+    if (candleSeries) candleSeries.setData(formattedData);
+    if (volumeSeries) volumeSeries.setData(volumeData);
+    if (ema9) ema9.setData(calculateAccurateEMA(formattedData, 9));
+    if (ema21) ema21.setData(calculateAccurateEMA(formattedData, 21));
+    if (ema50) ema50.setData(calculateAccurateEMA(formattedData, 50));
 
-    chart.subscribeCrosshairMove((param) => {
+    chartInstance.subscribeCrosshairMove((param) => {
       if (param && param.time && param.seriesData && candleSeries) {
         const data = param.seriesData.get(candleSeries);
         if (data) setOhlc(data);
-      } else if (lastCandle) {
-        setOhlc(lastCandle);
+      } else if (currentCandleRef.current) {
+        setOhlc(currentCandleRef.current);
       }
     });
 
-    chartRef.current = chart;
+    chartRef.current = chartInstance;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
     ema9SeriesRef.current = ema9;
@@ -279,7 +301,10 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
 
     return () => {
       resizeObserver.disconnect();
-      chart.remove();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockSymbol, timeframe, theme]);
@@ -318,10 +343,10 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </div>
 
         <div className="flex items-center gap-2 text-[11px] font-mono">
-          <span className="text-gray-500">O<span className="text-gray-400 ml-0.5">{ohlc.open?.toFixed(2)}</span></span>
-          <span className="text-gray-500">H<span className="text-gray-400 ml-0.5">{ohlc.high?.toFixed(2)}</span></span>
-          <span className="text-gray-500">L<span className="text-gray-400 ml-0.5">{ohlc.low?.toFixed(2)}</span></span>
-          <span className="text-gray-500">C<span className="text-gray-400 ml-0.5">{ohlc.close?.toFixed(2)}</span></span>
+          <span className="text-gray-500">O<span className="text-gray-400 ml-0.5">{parseNum(ohlc.open).toFixed(2)}</span></span>
+          <span className="text-gray-500">H<span className="text-gray-400 ml-0.5">{parseNum(ohlc.high).toFixed(2)}</span></span>
+          <span className="text-gray-500">L<span className="text-gray-400 ml-0.5">{parseNum(ohlc.low).toFixed(2)}</span></span>
+          <span className="text-gray-500">C<span className="text-gray-400 ml-0.5">{parseNum(ohlc.close).toFixed(2)}</span></span>
           <span className={`font-bold ml-1 ${isPos ? 'text-[#089981]' : 'text-[#f23645]'}`}>
             {isPos ? '+' : ''}{stockChange.toFixed(2)} ({isPos ? '+' : ''}{stockPercent.toFixed(2)}%)
           </span>
@@ -358,7 +383,7 @@ export default function TradingChart({ activeStock, timeframe = '1D', onOpenOrde
         </button>
       </div>
 
-      {/* DRAGGABLE & OFFSET EMA WIDGET */}
+      {/* DRAGGABLE EMA WIDGET */}
       <div
         style={{
           transform: `translate(${emaPos.x}px, ${emaPos.y}px)`,
