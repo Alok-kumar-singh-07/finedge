@@ -4,29 +4,47 @@ import { NSE_STOCKS_DIRECTORY } from '../dhanApi';
 export const useTradingStore = create((set, get) => ({
   // Stock Selection
   selectedStock: NSE_STOCKS_DIRECTORY?.[0] || {
-    id: 'HDFCBANK.NS',
-    symbol: 'HDFCBANK',
-    name: 'HDFC Bank Ltd.',
-    price: 1640.50,
-    change: 0.85
+    id: 'RELIANCE.NS',
+    symbol: 'RELIANCE',
+    name: 'Reliance Industries Ltd.',
+    price: 2980.68,
+    change: 1.63
   },
   setSelectedStock: (stock) => set({ selectedStock: stock }),
 
-  // Modal State (Managed globally so all Buy/Sell buttons work 100%)
+  // Live Price Ticker (Chant se live LTP update karega)
+  updateLivePrice: (symbol, newPrice) => {
+    const state = get();
+    const priceNum = Number(newPrice);
+    if (!priceNum) return;
+
+    // Update selected stock price
+    if (state.selectedStock?.symbol === symbol) {
+      set({
+        selectedStock: { ...state.selectedStock, price: priceNum }
+      });
+    }
+
+    // Update watchlist price
+    const updatedWatchlist = state.watchlist.map((s) =>
+      s.symbol === symbol ? { ...s, price: priceNum } : s
+    );
+    set({ watchlist: updatedWatchlist });
+  },
+
+  // Modal State
   isOrderModalOpen: false,
   orderModalAction: 'BUY',
   openOrderModal: (action = 'BUY') => set({ isOrderModalOpen: true, orderModalAction: action }),
   closeOrderModal: () => set({ isOrderModalOpen: false }),
 
-  // Chart Timeframe
+  // Timeframe & Watchlist
   timeframe: '1D',
   setTimeframe: (tf) => set({ timeframe: tf }),
-
-  // Watchlist
   watchlist: NSE_STOCKS_DIRECTORY || [],
   setWatchlist: (list) => set({ watchlist: list }),
 
-  // Wallet & Portfolio State
+  // Portfolio State
   cash: 1000000,
   orders: [],
   positions: [],
@@ -36,14 +54,14 @@ export const useTradingStore = create((set, get) => ({
   theme: 'dark',
   toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
-  // 1. ORDER EXECUTION (BUY / SELL)
+  // 1. ORDER EXECUTION (BUY & SELL / SHORT SELLING)
   executeOrder: ({ type, symbol, qty, price, product = 'INTRADAY' }) => {
     const state = get();
-    const currentPrice = Number(price) || state.selectedStock?.price || 1000;
+    const currentPrice = Number(price) || state.selectedStock?.price || 2980;
     const orderQty = Number(qty) || 1;
     const leverage = product === 'INTRADAY' ? 5 : product === 'MTF' ? 4 : 1;
     const totalValue = currentPrice * orderQty;
-    const requiredCash = totalValue / leverage;
+    const requiredMargin = totalValue / leverage;
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -57,71 +75,78 @@ export const useTradingStore = create((set, get) => ({
       product
     };
 
+    let updatedPositions = [...state.positions];
+    const existingIndex = updatedPositions.findIndex(
+      (p) => p.symbol === symbol && p.product === product
+    );
+
     if (type === 'BUY') {
-      if (state.cash < requiredCash) {
-        alert('Insufficient cash balance to place this buy order!');
+      // Agar pehle se Short (SELL) position hai, toh use Buy karke cover/close karein
+      if (existingIndex >= 0 && updatedPositions[existingIndex].type === 'SELL') {
+        const pos = updatedPositions[existingIndex];
+        const closeQty = Math.min(orderQty, pos.qty);
+        const pnl = (pos.avgPrice - currentPrice) * closeQty; // Short profit logic
+        const marginRefund = (pos.avgPrice * closeQty) / leverage;
+
+        const closedRecord = { time, symbol, qty: closeQty, pnl, type: 'SHORT_COVER' };
+
+        if (pos.qty <= closeQty) {
+          updatedPositions.splice(existingIndex, 1);
+        } else {
+          updatedPositions[existingIndex].qty -= closeQty;
+        }
+
+        set({
+          cash: state.cash + marginRefund + pnl,
+          orders: [newOrder, ...state.orders],
+          positions: updatedPositions,
+          realizedPnLList: [closedRecord, ...state.realizedPnLList]
+        });
         return;
       }
 
-      const existingPosIndex = state.positions.findIndex(
-        (p) => p.symbol === symbol && p.product === product
-      );
+      // Normal BUY execution
+      if (state.cash < requiredMargin) {
+        alert('Insufficient Cash Balance!');
+        return;
+      }
 
-      let updatedPositions = [...state.positions];
-
-      if (existingPosIndex >= 0) {
-        const existing = updatedPositions[existingPosIndex];
+      if (existingIndex >= 0 && updatedPositions[existingIndex].type === 'BUY') {
+        const existing = updatedPositions[existingIndex];
         const newTotalQty = existing.qty + orderQty;
-        const newAvgPrice = (existing.avgPrice * existing.qty + currentPrice * orderQty) / newTotalQty;
-        updatedPositions[existingPosIndex] = {
-          ...existing,
-          qty: newTotalQty,
-          avgPrice: newAvgPrice
-        };
+        const newAvg = (existing.avgPrice * existing.qty + currentPrice * orderQty) / newTotalQty;
+        updatedPositions[existingIndex] = { ...existing, qty: newTotalQty, avgPrice: newAvg };
       } else {
         updatedPositions.unshift({
           symbol,
           product,
+          type: 'BUY',
           qty: orderQty,
           avgPrice: currentPrice
         });
       }
 
       set({
-        cash: state.cash - requiredCash,
+        cash: Math.max(0, state.cash - requiredMargin),
         orders: [newOrder, ...state.orders],
         positions: updatedPositions
       });
+
     } else if (type === 'SELL') {
-      const posIndex = state.positions.findIndex(
-        (p) => p.symbol === symbol && p.product === product
-      );
+      // Agar pehle se BUY position hai, toh sell karke exit/square-off karein
+      if (existingIndex >= 0 && updatedPositions[existingIndex].type === 'BUY') {
+        const pos = updatedPositions[existingIndex];
+        const closeQty = Math.min(orderQty, pos.qty);
+        const pnl = (currentPrice - pos.avgPrice) * closeQty;
+        const marginRefund = (pos.avgPrice * closeQty) / leverage;
 
-      if (posIndex >= 0) {
-        const pos = state.positions[posIndex];
-        const sellQty = Math.min(orderQty, pos.qty);
-        const pnl = (currentPrice - pos.avgPrice) * sellQty;
+        const closedRecord = { time, symbol, qty: closeQty, pnl, type: 'LONG_EXIT' };
 
-        const closedRecord = {
-          time,
-          symbol,
-          qty: sellQty,
-          buyPrice: pos.avgPrice,
-          sellPrice: currentPrice,
-          pnl
-        };
-
-        let updatedPositions = [...state.positions];
-        if (pos.qty <= sellQty) {
-          updatedPositions.splice(posIndex, 1);
+        if (pos.qty <= closeQty) {
+          updatedPositions.splice(existingIndex, 1);
         } else {
-          updatedPositions[posIndex] = {
-            ...pos,
-            qty: pos.qty - sellQty
-          };
+          updatedPositions[existingIndex].qty -= closeQty;
         }
-
-        const marginRefund = (pos.avgPrice * sellQty) / leverage;
 
         set({
           cash: state.cash + marginRefund + pnl,
@@ -130,23 +155,46 @@ export const useTradingStore = create((set, get) => ({
           realizedPnLList: [closedRecord, ...state.realizedPnLList]
         });
       } else {
+        // Direct INTRADAY SHORT SELLING
+        if (state.cash < requiredMargin) {
+          alert('Insufficient Margin to Short Sell!');
+          return;
+        }
+
+        if (existingIndex >= 0 && updatedPositions[existingIndex].type === 'SELL') {
+          const existing = updatedPositions[existingIndex];
+          const newTotalQty = existing.qty + orderQty;
+          const newAvg = (existing.avgPrice * existing.qty + currentPrice * orderQty) / newTotalQty;
+          updatedPositions[existingIndex] = { ...existing, qty: newTotalQty, avgPrice: newAvg };
+        } else {
+          updatedPositions.unshift({
+            symbol,
+            product,
+            type: 'SELL',
+            qty: orderQty,
+            avgPrice: currentPrice
+          });
+        }
+
         set({
-          orders: [newOrder, ...state.orders]
+          cash: Math.max(0, state.cash - requiredMargin),
+          orders: [newOrder, ...state.orders],
+          positions: updatedPositions
         });
       }
     }
   },
 
-  // 2. CLOSE / EXIT POSITION ACTION
+  // 2. ONE-CLICK EXIT POSITION
   closePosition: (symbol, product) => {
     const state = get();
     const pos = state.positions.find((p) => p.symbol === symbol && p.product === product);
     if (!pos) return;
 
-    const currentStock = state.watchlist.find((s) => s.symbol === symbol) || state.selectedStock;
-    const currentPrice = Number(currentStock?.price || pos.avgPrice);
+    const currentPrice = Number(state.selectedStock?.price || pos.avgPrice);
     const leverage = product === 'INTRADAY' ? 5 : product === 'MTF' ? 4 : 1;
-    const pnl = (currentPrice - pos.avgPrice) * pos.qty;
+    const isLong = pos.type === 'BUY';
+    const pnl = isLong ? (currentPrice - pos.avgPrice) * pos.qty : (pos.avgPrice - currentPrice) * pos.qty;
     const marginRefund = (pos.avgPrice * pos.qty) / leverage;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -154,15 +202,14 @@ export const useTradingStore = create((set, get) => ({
       time,
       symbol,
       qty: pos.qty,
-      buyPrice: pos.avgPrice,
-      sellPrice: currentPrice,
-      pnl
+      pnl,
+      type: isLong ? 'LONG_EXIT' : 'SHORT_COVER'
     };
 
     const newOrder = {
       id: Date.now().toString(),
       time,
-      type: 'EXIT',
+      type: isLong ? 'SELL (EXIT)' : 'BUY (COVER)',
       symbol,
       qty: pos.qty,
       price: currentPrice,

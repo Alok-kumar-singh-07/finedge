@@ -104,24 +104,25 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
   const [showEMA9, setShowEMA9] = useState(true);
   const [showEMA21, setShowEMA21] = useState(true);
   const [showEMA50, setShowEMA50] = useState(true);
-
   const [pillTop, setPillTop] = useState(null);
 
   const store = useTradingStore();
-  const { theme, updateStockPrice, positions = [], closePosition } = store;
-  const stockSymbol = activeStock?.symbol || 'TATAMOTORS';
+  const { theme, updateLivePrice, positions = [], closePosition } = store;
+  
+  const stockSymbol = activeStock?.symbol || 'RELIANCE';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 1048.37);
-  const stockChange = parseNum(activeStock?.change, 16.80);
+  const stockPrice = parseNum(activeStock?.price, 2980.68);
+  const stockChange = parseNum(activeStock?.change, 1.63);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
-  // Active Position Details
-  const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty !== 0);
+  // Active Position Details for this specific stock
+  const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty > 0);
   const positionAvgPrice = currentStockPosition?.avgPrice || 0;
-  const positionQty = Math.abs(currentStockPosition?.qty || 0);
-  const isLong = (currentStockPosition?.qty || 0) > 0;
+  const positionQty = currentStockPosition?.qty || 0;
+  const isLong = currentStockPosition?.type !== 'SELL';
   const productType = currentStockPosition?.product || 'INTRADAY';
 
+  // Live P&L: Long (LTP - Avg) or Short (Avg - LTP)
   const positionPnL = currentStockPosition 
     ? (isLong ? (stockPrice - positionAvgPrice) : (positionAvgPrice - stockPrice)) * positionQty 
     : 0;
@@ -289,6 +290,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
+    // Real-Time Live Ticker to update Stock Price & Live PnL across app
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
       const delta = (Math.random() - 0.48) * 0.9;
@@ -305,8 +307,8 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
       currentCandleRef.current = tickCandle;
       candleSeriesRef.current.update(tickCandle);
 
-      if (typeof updateStockPrice === 'function') {
-        updateStockPrice(stockSymbol, newClose);
+      if (typeof updateLivePrice === 'function') {
+        updateLivePrice(stockSymbol, newClose);
       }
       syncPillYCoordinate();
     }, 1200);
@@ -335,7 +337,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockSymbol, timeframe, theme, positionAvgPrice]);
+  }, [stockSymbol, timeframe, theme]);
 
   // Sync Chart Dynamic Price Line with Position Entry
   useEffect(() => {
