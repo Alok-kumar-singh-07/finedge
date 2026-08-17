@@ -109,20 +109,20 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
   const store = useTradingStore();
   const { theme, updateLivePrice, positions = [], closePosition } = store;
   
-  const stockSymbol = activeStock?.symbol || 'RELIANCE';
+  const stockSymbol = activeStock?.symbol || 'HDFCBANK';
   const stockName = activeStock?.name || stockSymbol;
-  const stockPrice = parseNum(activeStock?.price, 2980.68);
+  const stockPrice = parseNum(activeStock?.price, 1640.69);
   const stockChange = parseNum(activeStock?.change, 1.63);
   const stockPercent = parseNum(activeStock?.changePercent, 1.63);
 
-  // Active Position Details for this specific stock
+  // Active Position for this stock
   const currentStockPosition = positions.find((p) => p.symbol === stockSymbol && p.qty > 0);
-  const positionAvgPrice = currentStockPosition?.avgPrice || 0;
-  const positionQty = currentStockPosition?.qty || 0;
+  const positionAvgPrice = Number(currentStockPosition?.avgPrice || 0);
+  const positionQty = Number(currentStockPosition?.qty || 0);
   const isLong = currentStockPosition?.type !== 'SELL';
   const productType = currentStockPosition?.product || 'INTRADAY';
 
-  // Live P&L: Long (LTP - Avg) or Short (Avg - LTP)
+  // Live P&L: Long = (LTP - Avg) * Qty | Short = (Avg - LTP) * Qty
   const positionPnL = currentStockPosition 
     ? (isLong ? (stockPrice - positionAvgPrice) : (positionAvgPrice - stockPrice)) * positionQty 
     : 0;
@@ -135,14 +135,15 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
   const gridColor = theme === 'midnight' ? '#141414' : isDark ? '#1E2533' : '#f0f3fa';
   const borderColor = isDark ? '#232936' : '#e0e3eb';
 
-  const syncPillYCoordinate = () => {
+  // Continuous coordinate calculation for Floating Pill
+  const syncPillPosition = () => {
     if (!candleSeriesRef.current || !positionAvgPrice) {
       setPillTop(null);
       return;
     }
     try {
       const y = candleSeriesRef.current.priceToCoordinate(positionAvgPrice);
-      if (y !== null && !isNaN(y)) {
+      if (y !== null && !isNaN(y) && y >= 0) {
         setPillTop(y);
       }
     } catch {
@@ -184,7 +185,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
           secondsVisible: false,
           barSpacing: timeframe === '1M' ? 14 : timeframe === '1W' ? 10 : 8,
           minBarSpacing: 2,
-          rightOffset: 15,
+          rightOffset: 18,
           fixLeftEdge: false,
           fixRightEdge: false,
         },
@@ -273,14 +274,11 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
     if (ema21) ema21.setData(calculateAccurateEMA(formattedData, 21));
     if (ema50) ema50.setData(calculateAccurateEMA(formattedData, 50));
 
-    chartInstance.subscribeCrosshairMove(() => {
-      syncPillYCoordinate();
-    });
+    // Listeners for zoom/pan to keep pill attached to exact price
+    chartInstance.subscribeCrosshairMove(syncPillPosition);
 
     if (chartInstance.timeScale()) {
-      chartInstance.timeScale().subscribeVisibleLogicalRangeChange(() => {
-        syncPillYCoordinate();
-      });
+      chartInstance.timeScale().subscribeVisibleLogicalRangeChange(syncPillPosition);
     }
 
     chartRef.current = chartInstance;
@@ -290,10 +288,10 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
     ema21SeriesRef.current = ema21;
     ema50SeriesRef.current = ema50;
 
-    // Real-Time Live Ticker to update Stock Price & Live PnL across app
+    // Real-Time Live Ticker
     const tickInterval = setInterval(() => {
       if (!currentCandleRef.current || !candleSeriesRef.current) return;
-      const delta = (Math.random() - 0.48) * 0.9;
+      const delta = (Math.random() - 0.48) * 0.8;
       const newClose = parseFloat((currentCandleRef.current.close + delta).toFixed(2));
       const newHigh = Math.max(currentCandleRef.current.high, newClose);
       const newLow = Math.min(currentCandleRef.current.low, newClose);
@@ -310,7 +308,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
       if (typeof updateLivePrice === 'function') {
         updateLivePrice(stockSymbol, newClose);
       }
-      syncPillYCoordinate();
+      syncPillPosition();
     }, 1200);
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -318,7 +316,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
       const { width: w, height: h } = entries[0].contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: w, height: h });
-        syncPillYCoordinate();
+        syncPillPosition();
       }
     });
 
@@ -326,7 +324,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
       resizeObserver.observe(chartContainerRef.current);
     }
 
-    setTimeout(syncPillYCoordinate, 150);
+    setTimeout(syncPillPosition, 100);
 
     return () => {
       clearInterval(tickInterval);
@@ -339,7 +337,7 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockSymbol, timeframe, theme]);
 
-  // Sync Chart Dynamic Price Line with Position Entry
+  // Sync Chart Dynamic Price Line with Live Title & PnL
   useEffect(() => {
     if (!candleSeriesRef.current) return;
 
@@ -349,19 +347,21 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
     }
 
     if (currentStockPosition && positionAvgPrice > 0) {
-      const lineColor = isPosPnL ? '#089981' : '#f23645';
+      const lineColor = isLong ? '#089981' : '#f23645';
+      const pnlSign = positionPnL >= 0 ? '+' : '';
+      
       positionLineRef.current = candleSeriesRef.current.createPriceLine({
         price: positionAvgPrice,
         color: lineColor,
         lineWidth: 1.5,
         lineStyle: 0,
         axisLabelVisible: true,
-        title: `${isLong ? 'BUY' : 'SELL'} @ ₹${positionAvgPrice.toFixed(2)}`,
+        title: `${isLong ? 'BUY' : 'SELL'} @ ₹${positionAvgPrice.toFixed(2)} (${pnlSign}₹${positionPnL.toFixed(1)})`,
       });
-      syncPillYCoordinate();
+      syncPillPosition();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStockPosition, positionAvgPrice, isLong, isPosPnL]);
+  }, [currentStockPosition, positionAvgPrice, stockPrice, positionPnL, isLong]);
 
   useEffect(() => {
     if (ema9SeriesRef.current) ema9SeriesRef.current.applyOptions({ visible: showEMA9 });
@@ -415,14 +415,14 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
         </div>
       </div>
 
-      {/* ULTRA-COMPACT ON-CHART POSITION PILL */}
-      {currentStockPosition && pillTop !== null && pillTop > 0 && (
+      {/* ULTRA-ACCURATE ON-CHART FLOATING POSITION PILL */}
+      {currentStockPosition && pillTop !== null && pillTop >= 0 && (
         <div
           style={{
-            top: `${pillTop - 11}px`,
-            right: '75px',
+            top: `${pillTop - 12}px`,
+            right: '85px',
           }}
-          className={`absolute z-30 flex items-center gap-1.5 px-2 py-0.5 rounded-full shadow-lg border text-[10px] font-mono backdrop-blur-md transition-all duration-75 ${
+          className={`absolute z-40 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full shadow-2xl border text-[10px] font-mono backdrop-blur-md transition-all duration-75 ${
             isPosPnL 
               ? 'bg-[#089981]/95 border-[#089981] text-white' 
               : 'bg-[#f23645]/95 border-[#f23645] text-white'
@@ -432,14 +432,14 @@ export default function TradingChart({ activeStock, timeframe = '1D' }) {
             {isLong ? 'BUY' : 'SELL'} [{productType.slice(0, 3)}] {positionQty}
           </span>
 
-          <span className="font-bold border-l border-white/30 pl-1">
+          <span className="font-bold border-l border-white/30 pl-1.5">
             {isPosPnL ? '+' : ''}₹{positionPnL.toFixed(2)}
           </span>
 
           <button
             onClick={() => closePosition(stockSymbol, currentStockPosition.product)}
-            title="Exit Position"
-            className="ml-0.5 p-0.5 rounded-full bg-black/30 hover:bg-black/70 text-white transition cursor-pointer flex items-center justify-center active:scale-90"
+            title="Instant Exit"
+            className="ml-1 p-0.5 rounded-full bg-black/40 hover:bg-black/80 text-white transition cursor-pointer flex items-center justify-center active:scale-90"
           >
             <X className="w-2.5 h-2.5" />
           </button>
