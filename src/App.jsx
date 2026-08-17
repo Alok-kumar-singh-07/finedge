@@ -13,22 +13,19 @@ export default function App() {
     theme, 
     positions = [], 
     orders = [], 
-    watchlist = [],
-    realizedPnLList = [],
-    closePosition 
+    watchlist = [], 
+    realizedPnLList = [], 
+    closePosition,
+    isOrderModalOpen,
+    orderModalAction,
+    openOrderModal,
+    closeOrderModal
   } = store;
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalAction, setModalAction] = useState('BUY');
   const [timeframe, setTimeframe] = useState('1D');
   const [activeBottomTab, setActiveBottomTab] = useState('positions');
   const [isBottomOpen, setIsBottomOpen] = useState(false);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
-
-  const handleOpenOrder = (action) => {
-    setModalAction(action);
-    setIsModalOpen(true);
-  };
 
   const isDark = theme === 'dark' || theme === 'midnight';
 
@@ -49,9 +46,7 @@ export default function App() {
       
       {/* 1. TOP MAIN NAVIGATION */}
       <Navbar 
-        onOpenOrder={handleOpenOrder} 
         onToggleWatchlist={() => setIsWatchlistOpen(!isWatchlistOpen)}
-        isWatchlistOpen={isWatchlistOpen}
         timeframe={timeframe}
         setTimeframe={setTimeframe}
       />
@@ -81,20 +76,20 @@ export default function App() {
             <TradingChart 
               activeStock={selectedStock} 
               timeframe={timeframe}
-              onOpenOrder={handleOpenOrder}
+              onOpenOrder={openOrderModal}
             />
           </div>
 
           {/* Bottom Mobile Action Bar */}
           <div className="sm:hidden grid grid-cols-2 gap-2 p-1.5 bg-[#0E131F] border-t border-[#1E293B] z-30">
             <button
-              onClick={() => handleOpenOrder('BUY')}
+              onClick={() => openOrderModal('BUY')}
               className="bg-[#00897B] text-white py-1.5 rounded font-bold text-xs active:scale-98 transition cursor-pointer shadow"
             >
               BUY ({selectedStock?.symbol})
             </button>
             <button
-              onClick={() => handleOpenOrder('SELL')}
+              onClick={() => openOrderModal('SELL')}
               className="bg-[#EF5350] text-white py-1.5 rounded font-bold text-xs active:scale-98 transition cursor-pointer shadow"
             >
               SELL ({selectedStock?.symbol})
@@ -283,11 +278,11 @@ export default function App() {
       </div>
 
       {/* 3. ORDER EXECUTION MODAL */}
-      {isModalOpen && (
+      {isOrderModalOpen && (
         <OrderModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          initialType={modalAction}
+          isOpen={isOrderModalOpen}
+          onClose={closeOrderModal}
+          initialType={orderModalAction}
           stock={selectedStock}
         />
       )}

@@ -1,9 +1,8 @@
 import { Search, Moon, Sun } from 'lucide-react';
-import useTradingStore from '../store/useTradingStore';
+import { useTradingStore } from '../store/useTradingStore';
 
-export default function Navbar({ onOpenOrder, onToggleWatchlist, timeframe, setTimeframe }) {
-  const store = useTradingStore();
-  const { theme, toggleTheme, cash = 1000000, selectedStock } = store;
+export default function Navbar({ onToggleWatchlist, timeframe, setTimeframe }) {
+  const { theme, toggleTheme, cash = 1000000, selectedStock, openOrderModal } = useTradingStore();
   const isDark = theme === 'dark' || theme === 'midnight';
 
   const timeframes = ['1m', '5m', '15m', '1D', '1W', '1M'];
@@ -50,13 +49,13 @@ export default function Navbar({ onOpenOrder, onToggleWatchlist, timeframe, setT
         {/* Right: Quick Buy/Sell + Fully Visible Cash Card + Theme Toggle */}
         <div className="flex items-center gap-1.5 shrink-0 pl-2">
           <button
-            onClick={() => onOpenOrder('SELL')}
+            onClick={() => openOrderModal('SELL')}
             className="bg-[#f23645] hover:bg-[#d82c3b] text-white px-2 py-1 rounded text-xs font-bold transition cursor-pointer shadow active:scale-95"
           >
             Sell
           </button>
           <button
-            onClick={() => onOpenOrder('BUY')}
+            onClick={() => openOrderModal('BUY')}
             className="bg-[#00897B] hover:bg-[#00796B] text-white px-2 py-1 rounded text-xs font-bold transition cursor-pointer shadow active:scale-95"
           >
             Buy

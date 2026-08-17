@@ -12,6 +12,12 @@ export const useTradingStore = create((set, get) => ({
   },
   setSelectedStock: (stock) => set({ selectedStock: stock }),
 
+  // Modal State (Managed globally so all Buy/Sell buttons work 100%)
+  isOrderModalOpen: false,
+  orderModalAction: 'BUY',
+  openOrderModal: (action = 'BUY') => set({ isOrderModalOpen: true, orderModalAction: action }),
+  closeOrderModal: () => set({ isOrderModalOpen: false }),
+
   // Chart Timeframe
   timeframe: '1D',
   setTimeframe: (tf) => set({ timeframe: tf }),
@@ -53,7 +59,7 @@ export const useTradingStore = create((set, get) => ({
 
     if (type === 'BUY') {
       if (state.cash < requiredCash) {
-        alert('Insufficient cash balance!');
+        alert('Insufficient cash balance to place this buy order!');
         return;
       }
 
