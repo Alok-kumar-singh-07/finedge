@@ -2,31 +2,31 @@ import { useState } from 'react';
 import { X, ShieldCheck, Zap } from 'lucide-react';
 import { useTradingStore } from '../store/useTradingStore';
 
-export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock }) {
-  const store = useTradingStore();
-  const executeOrder = store?.executeOrder || (() => {});
-  const rawCash = store?.cash ?? 1000000;
-  const cash = typeof rawCash === 'number' ? rawCash : parseFloat(rawCash) || 1000000;
+export default function OrderModal() {
+  const { 
+    isOrderModalOpen, 
+    closeOrderModal, 
+    orderModalAction, 
+    selectedStock, 
+    cash, 
+    executeOrder 
+  } = useTradingStore();
 
-  const [orderType, setOrderType] = useState(initialType);
-  const [productType, setProductType] = useState('INTRADAY'); // INTRADAY | DELIVERY | MTF
-  const [orderCategory, setOrderCategory] = useState('MARKET'); // MARKET | LIMIT
+  const [orderType, setOrderType] = useState(orderModalAction || 'BUY');
+  const [productType, setProductType] = useState('INTRADAY');
+  const [orderCategory, setOrderCategory] = useState('MARKET');
   const [quantity, setQuantity] = useState(1);
   const [customPrice, setCustomPrice] = useState('');
 
-  if (!isOpen) return null;
+  if (!isOrderModalOpen) return null;
 
-  const currentPrice = Number(stock?.price || 1000);
+  const currentPrice = Number(selectedStock?.price || 1640.50);
   const effectivePrice = orderCategory === 'LIMIT' && customPrice !== '' ? Number(customPrice) : currentPrice;
+  const currentCash = typeof cash === 'number' ? cash : 1000000;
 
-  // Multiplier based on selected product type
   const leverageMultiplier = productType === 'INTRADAY' ? 5 : productType === 'MTF' ? 4 : 1;
-  const effectiveBuyingPower = cash * leverageMultiplier;
-
-  // Max Quantity calculated automatically
+  const effectiveBuyingPower = currentCash * leverageMultiplier;
   const maxAffordableQty = effectivePrice > 0 ? Math.max(1, Math.floor(effectiveBuyingPower / effectivePrice)) : 1;
-
-  // Margin required after leverage
   const requiredMargin = (Number(quantity || 1) * effectivePrice) / leverageMultiplier;
   const isBuy = orderType === 'BUY';
 
@@ -38,34 +38,35 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
     e.preventDefault();
     executeOrder({
       type: orderType,
-      symbol: stock?.symbol || 'STOCK',
+      symbol: selectedStock?.symbol || 'HDFCBANK',
       qty: Number(quantity) || 1,
       price: effectivePrice,
       product: productType,
     });
-    onClose();
+    closeOrderModal();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in select-none">
-      <div className="bg-[#111726] border border-[#1E293B] w-full max-w-md rounded-xl shadow-2xl overflow-hidden text-slate-200 text-xs">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none">
+      <div className="bg-[#111726] border border-[#1E293B] w-full max-w-md rounded-xl shadow-2xl overflow-hidden text-slate-200 text-xs animate-in fade-in zoom-in duration-150">
         
         {/* Modal Header */}
-        <div className={`px-4 py-3 flex items-center justify-between border-b border-[#1E293B] ${isBuy ? 'bg-[#00897B]/10' : 'bg-[#EF5350]/10'}`}>
+        <div className={`px-4 py-3 flex items-center justify-between border-b border-[#1E293B] ${isBuy ? 'bg-[#00897B]/20' : 'bg-[#EF5350]/20'}`}>
           <div className="flex items-center gap-2">
             <span className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${isBuy ? 'bg-[#00897B]' : 'bg-[#EF5350]'}`}>
               {orderType}
             </span>
             <div>
-              <span className="font-bold text-sm text-white">{stock?.symbol || 'STOCK'}</span>
+              <span className="font-bold text-sm text-white">{selectedStock?.symbol || 'STOCK'}</span>
               <span className="text-[11px] text-slate-400 ml-1.5">NSE • ₹{currentPrice.toFixed(2)}</span>
             </div>
           </div>
           <button 
-            onClick={onClose}
+            type="button"
+            onClick={closeOrderModal}
             className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -92,7 +93,7 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
             </button>
           </div>
 
-          {/* Product Tabs (Intraday, Delivery, MTF) */}
+          {/* Product Tabs */}
           <div>
             <label className="text-[11px] text-slate-400 mb-1.5 block font-semibold">Product Type</label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -118,7 +119,7 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
             </div>
           </div>
 
-          {/* Order Category (Market / Limit) */}
+          {/* Order Category */}
           <div className="flex items-center gap-2 border-b border-[#1E293B] pb-3">
             {['MARKET', 'LIMIT'].map((cat) => (
               <button
@@ -134,20 +135,18 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
             ))}
           </div>
 
-          {/* Quantity & Price Inputs */}
+          {/* Quantity & Price */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-slate-400 font-semibold">Quantity (Qty)</label>
-                {/* Clickable Maximum Quantity Button */}
                 <button
                   type="button"
                   onClick={handleSetMaxQuantity}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 font-mono bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/30 flex items-center gap-0.5 cursor-pointer"
-                  title="Click to set max quantity based on funds"
+                  className="text-[10px] text-blue-400 hover:text-blue-300 font-mono bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/30 flex items-center gap-0.5 cursor-pointer"
                 >
                   <Zap className="w-2.5 h-2.5 text-amber-400" />
-                  <span>Max: {maxAffordableQty.toLocaleString('en-IN')}</span>
+                  <span>Max: {maxAffordableQty}</span>
                 </button>
               </div>
               <input
@@ -183,7 +182,7 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
             </div>
             <div>
               <span className="text-slate-400">Available: </span>
-              <span className="font-bold text-emerald-400 font-mono">₹{cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              <span className="font-bold text-emerald-400 font-mono">₹{currentCash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
@@ -195,7 +194,7 @@ export default function OrderModal({ isOpen, onClose, initialType = 'BUY', stock
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>INSTANT {orderType} ({stock?.symbol || 'STOCK'})</span>
+            <span>INSTANT {orderType} ({selectedStock?.symbol || 'STOCK'})</span>
           </button>
         </form>
       </div>

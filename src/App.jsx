@@ -16,10 +16,7 @@ export default function App() {
     watchlist = [], 
     realizedPnLList = [], 
     closePosition,
-    isOrderModalOpen,
-    orderModalAction,
-    openOrderModal,
-    closeOrderModal
+    openOrderModal
   } = store;
 
   const [timeframe, setTimeframe] = useState('1D');
@@ -29,7 +26,7 @@ export default function App() {
 
   const isDark = theme === 'dark' || theme === 'midnight';
 
-  // Unrealized P&L
+  // Unrealized P&L Calculation
   const unrealizedPnL = positions.reduce((acc, pos) => {
     const currentStock = watchlist.find((s) => s.symbol === pos.symbol) || selectedStock;
     const ltp = currentStock?.price || pos.avgPrice;
@@ -56,7 +53,7 @@ export default function App() {
         
         {/* Left Drawing Tools (Desktop Only) */}
         <div className="hidden md:flex flex-col border-r border-[#1E293B] bg-[#0E131F] w-10 shrink-0 z-10">
-          <div className="flex flex-col items-center py-2 gap-3 text-slate-400 text-xs">
+          <div className="flex items-center flex-col py-2 gap-3 text-slate-400 text-xs">
             <span className="p-1.5 hover:bg-slate-800 rounded cursor-pointer" title="Crosshair">✛</span>
             <span className="p-1.5 hover:bg-slate-800 rounded cursor-pointer" title="Trendline">╱</span>
             <span className="p-1.5 hover:bg-slate-800 rounded cursor-pointer" title="Measure">📏</span>
@@ -278,14 +275,7 @@ export default function App() {
       </div>
 
       {/* 3. ORDER EXECUTION MODAL */}
-      {isOrderModalOpen && (
-        <OrderModal
-          isOpen={isOrderModalOpen}
-          onClose={closeOrderModal}
-          initialType={orderModalAction}
-          stock={selectedStock}
-        />
-      )}
+      <OrderModal />
     </div>
   );
 }
